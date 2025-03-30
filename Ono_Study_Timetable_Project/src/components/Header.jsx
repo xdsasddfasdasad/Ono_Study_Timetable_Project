@@ -4,9 +4,9 @@ import React from 'react'
 export default function Header() {
   return (
     <AppBar>
-      <Toolbar>
+      <Toolbar position='static'>
         <Typography variant='h6' component="div">
-          Header
+          Ono_Study_Timetable_Project
         </Typography>
       </Toolbar>
     </AppBar> 
