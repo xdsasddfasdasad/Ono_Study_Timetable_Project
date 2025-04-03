@@ -1,12 +1,13 @@
-import './App.css'
-import Header from './components/Header'
+// src/App.jsx
+import AppRouter from "./router/AppRouter";
+// future: import { AuthProvider } from "./context/AuthContext";
 
 function App() {
   return (
-    <>
-      <Header />
-    </>
-  )
+    // <AuthProvider>  // נוסיף כשיהיה ניהול הרשאות
+    <AppRouter />
+    // </AuthProvider>
+  );
 }
 
-export default App
+export default App;
