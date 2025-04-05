@@ -108,6 +108,7 @@ const StudentManagementModal = () => {
         open={editOpen}
         onClose={() => setEditOpen(false)}
         student={selectedStudent}
+        existingStudents={students}
         onSave={handleEdit}
       />
     </Box>
