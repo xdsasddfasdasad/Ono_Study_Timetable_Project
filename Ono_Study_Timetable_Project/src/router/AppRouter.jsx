@@ -6,7 +6,7 @@ import LoginPage from "../pages/LoginPage";
 import HomePage from "../pages/HomePage";
 import HelpPage from "../pages/HelpPage";
 import StudentManagementPage from "../pages/StudentManagementPage";
-import SystemInfoDashboardPage from "../pages/SystemInfoDashBoardPage";
+import SystemInfoDashboardPage from "../pages/SystemInfoDashboardPage";
 
 // TimeTable Pages (מערכת שעות)
 import TimeTableCalendarViewPage from "../pages/TimeTablePages/TimeTableCalendarViewPage";

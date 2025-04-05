@@ -1,7 +1,10 @@
-import React from 'react'
+import AddStudentsFormModal from "../components/modals/AddStudentsFormModal";
 
-export default function StudentManagementPage() {
+const StudentManagementPage = () => {
   return (
-    <div>StudentManagementPage</div>
-  )
-}
+    <div>
+      <h1>ניהול סטודנטים</h1>
+      <AddStudentsFormModal />
+    </div>
+  );
+};
