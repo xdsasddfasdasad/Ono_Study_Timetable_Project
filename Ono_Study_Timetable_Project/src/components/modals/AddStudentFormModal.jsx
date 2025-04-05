@@ -85,7 +85,7 @@ const EditStudentFormModal = ({ open, onClose, student, onSave, existingStudents
         {generalError && <Alert severity="error">{generalError}</Alert>}
 
         <TextField label="Student ID" name="id" value={formData.id}
-          InputProps={{ readOnly: true }} fullWidth />
+          onChange={handleChange} error={!!errors.id} helperText={errors.id} fullWidth />
 
         <TextField label="First Name" name="firstName" value={formData.firstName}
           onChange={handleChange} error={!!errors.firstName} helperText={errors.firstName} fullWidth />
@@ -102,14 +102,8 @@ const EditStudentFormModal = ({ open, onClose, student, onSave, existingStudents
         <TextField label="Username" name="username" value={formData.username}
           onChange={handleChange} error={!!errors.username} helperText={errors.username} fullWidth />
 
-        <TextField
-          label="New Password (optional)"
-          name="password"
-          type="password"
-          value={formData.password}
-          onChange={handleChange}
-          fullWidth
-        />
+        <TextField label="New Password" name="password" type="password" value={formData.password} 
+          onChange={handleChange} fullWidth />
       </Stack>
     </PopupModal>
   );
