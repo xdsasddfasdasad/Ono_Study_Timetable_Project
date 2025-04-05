@@ -1,6 +1,4 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-
-// Layout
 import AppLayout from "../layouts/AppLayout";
 
 // Pages
@@ -15,7 +13,6 @@ import TimeTableCalendarViewPage from "../pages/TimeTablePages/TimeTableCalendar
 import TimeTableListViewPage from "../pages/TimeTablePages/TimeTableListViewPage";
 import TimeTableManagementPage from "../pages/TimeTablePages/TimeTableManagementPage";
 
-// 404 fallback
 const NotFoundPage = () => (
   <div style={{ padding: "2rem" }}>
     <h1>404 - Page Not Found</h1>
@@ -26,13 +23,13 @@ export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* ברירת מחדל: הפניה לדף התחברות */}
+        {/* דף ברירת מחדל */}
         <Route path="/" element={<Navigate to="/login" replace />} />
 
-        {/* דפים שלא משתמשים ב-Layout */}
+        {/* דפים ללא AppBar */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* דפים עם Layout קבוע (AppBar) */}
+        {/* דפים עם Layout */}
         <Route element={<AppLayout />}>
           <Route path="/home" element={<HomePage />} />
           <Route path="/help" element={<HelpPage />} />
@@ -43,7 +40,7 @@ export default function AppRouter() {
           <Route path="/schedule/management" element={<TimeTableManagementPage />} />
         </Route>
 
-        {/* 404 */}
+        {/* דף 404 */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>

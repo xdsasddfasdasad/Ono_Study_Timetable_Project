@@ -2,13 +2,14 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import { ThemeProvider } from "@mui/material/styles";
-import theme from "./theme/theme";
-import { StrictMode } from "react";
+import CssBaseline from "@mui/material/CssBaseline";
+import theme from "./theme/theme"; // אם יצרת theme
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <StrictMode>
+  <React.StrictMode>
     <ThemeProvider theme={theme}>
+      <CssBaseline />
       <App />
     </ThemeProvider>
-  </StrictMode>
+  </React.StrictMode>
 );

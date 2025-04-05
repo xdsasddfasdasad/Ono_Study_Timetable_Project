@@ -1,4 +1,3 @@
-import React from "react";
 import { Outlet } from "react-router-dom";
 import HeaderNavigationBar from "../components/Header/HeaderNavigationBar";
 import { Box, Container } from "@mui/material";
