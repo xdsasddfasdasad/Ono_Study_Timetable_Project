@@ -1,10 +1,11 @@
-import AddStudentsFormModal from "../components/modals/AddStudentsFormModal";
+import React from "react";
 
 const StudentManagementPage = () => {
   return (
-    <div>
+    <div style={{ padding: "2rem" }}>
       <h1>ניהול סטודנטים</h1>
-      <AddStudentsFormModal />
     </div>
   );
 };
+
+export default StudentManagementPage; // 👈 זה חובה
