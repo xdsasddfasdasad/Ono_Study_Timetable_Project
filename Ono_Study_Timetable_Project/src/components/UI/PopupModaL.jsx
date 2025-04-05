@@ -19,7 +19,7 @@ const PopupModal = ({ open, onClose, title, children, actions }) => {
       maxWidth="sm"
     >
       <DialogTitle sx={{ m: 0, p: 2 }}>
-        <Typography variant="h6">{title}</Typography>
+        <Typography variant="h6">{title} component="span"</Typography>
         <IconButton
           aria-label="close"
           onClick={onClose}
