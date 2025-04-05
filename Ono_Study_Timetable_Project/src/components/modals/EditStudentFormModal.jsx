@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   TextField,
   Stack,
@@ -6,7 +6,7 @@ import {
 } from "@mui/material";
 import PopupModal from "../UI/PopupModal";
 
-const AddStudentFormModal = ({ open, onClose, onSave }) => {
+const EditStudentFormModal = ({ open, onClose, student, onSave }) => {
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -14,14 +14,25 @@ const AddStudentFormModal = ({ open, onClose, onSave }) => {
     phone: "",
   });
 
+  // טען את הנתונים לתוך הטופס כשנפתח
+  useEffect(() => {
+    if (student) {
+      setFormData({
+        firstName: student.firstName || "",
+        lastName: student.lastName || "",
+        email: student.email || "",
+        phone: student.phone || "",
+      });
+    }
+  }, [student]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = () => {
-    // בעתיד: הוספה ל־firebase או context
-    if (onSave) onSave(formData);
+    if (onSave) onSave({ ...formData, id: student?.id });
     onClose();
   };
 
@@ -29,10 +40,10 @@ const AddStudentFormModal = ({ open, onClose, onSave }) => {
     <PopupModal
       open={open}
       onClose={onClose}
-      title="Add New Student"
+      title="Edit Student"
       actions={
         <Button variant="contained" onClick={handleSubmit}>
-          Save
+          Save Changes
         </Button>
       }
     >
@@ -70,4 +81,4 @@ const AddStudentFormModal = ({ open, onClose, onSave }) => {
   );
 };
 
-export default AddStudentFormModal;
+export default EditStudentFormModal;

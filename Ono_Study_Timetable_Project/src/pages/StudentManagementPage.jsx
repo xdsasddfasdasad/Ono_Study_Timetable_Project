@@ -1,11 +1,12 @@
 import React from "react";
+import StudentManagementModal from "../components/modals/StudentManagementModal";
 
 const StudentManagementPage = () => {
   return (
-    <div style={{ padding: "2rem" }}>
-      <h1>ניהול סטודנטים</h1>
+    <div>
+      <StudentManagementModal />
     </div>
   );
 };
 
-export default StudentManagementPage; // 👈 זה חובה
+export default StudentManagementPage;
