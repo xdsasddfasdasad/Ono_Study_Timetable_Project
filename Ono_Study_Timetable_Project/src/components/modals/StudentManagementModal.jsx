@@ -14,7 +14,7 @@ import {
   Stack,
 } from "@mui/material";
 import { Delete, Edit } from "@mui/icons-material";
-import AddStudentFormModal from "./AddStudentsFormModal";
+import AddStudentFormModal from "./AddStudentFormModal";
 import EditStudentFormModal from "./EditStudentFormModal";
 
 const StudentManagementModal = () => {

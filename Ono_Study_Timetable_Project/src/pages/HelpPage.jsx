@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { Button, Box } from "@mui/material";
-import HelpModal from "../components/modals/HelpModal";
+import HelpModal from "../components/modals/HelpModal.jsx";
 
 const HelpPage = () => {
-  const [open, setOpen] = useState(true); // מציג את המודל ברירת מחדל
+  const [open, setOpen] = useState(true);
 
   return (
     <Box sx={{ padding: 4 }}>
