@@ -14,7 +14,7 @@ import {
   Stack,
 } from "@mui/material";
 import { Delete, Edit } from "@mui/icons-material";
-import AddStudentFormModal from "./AddStudentFormModal";
+import AddStudentFormModal from "./AddStudentsFormModal";
 import EditStudentFormModal from "./EditStudentFormModal";
 
 const StudentManagementModal = () => {
@@ -98,7 +98,6 @@ const StudentManagementModal = () => {
         </Table>
       </TableContainer>
 
-      {/* מודלים */}
       <AddStudentFormModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
