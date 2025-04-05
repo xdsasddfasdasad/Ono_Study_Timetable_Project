@@ -1,17 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
-  Box,
-  Button,
-  IconButton,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-  Stack,
+  Box, Button, IconButton, Paper, Table, TableBody,
+  TableCell, TableContainer, TableHead, TableRow, Typography, Stack,
 } from "@mui/material";
 import { Delete, Edit } from "@mui/icons-material";
 import AddStudentFormModal from "./AddStudentFormModal";
@@ -23,19 +13,35 @@ const StudentManagementModal = () => {
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
+  useEffect(() => {
+    const stored = localStorage.getItem("students");
+    if (stored) {
+      setStudents(JSON.parse(stored));
+    }
+  }, []);
+
+  const saveToStorage = (data) => {
+    localStorage.setItem("students", JSON.stringify(data));
+  };
+
   const handleAdd = (student) => {
-    const newStudent = { ...student, id: Date.now() };
-    setStudents((prev) => [...prev, newStudent]);
+    const updated = [...students, student];
+    setStudents(updated);
+    saveToStorage(updated);
   };
 
   const handleEdit = (updatedStudent) => {
-    setStudents((prev) =>
-      prev.map((s) => (s.id === updatedStudent.id ? updatedStudent : s))
+    const updated = students.map((s) =>
+      s.id === updatedStudent.id ? updatedStudent : s
     );
+    setStudents(updated);
+    saveToStorage(updated);
   };
 
   const handleDelete = (id) => {
-    setStudents((prev) => prev.filter((s) => s.id !== id));
+    const updated = students.filter((s) => s.id !== id);
+    setStudents(updated);
+    saveToStorage(updated);
   };
 
   const openEditModal = (student) => {
@@ -66,11 +72,7 @@ const StudentManagementModal = () => {
             {students.map((student) => (
               <TableRow key={student.id}>
                 <TableCell>
-                  <Button
-                    variant="text"
-                    color="primary"
-                    onClick={() => openEditModal(student)}
-                  >
+                  <Button variant="text" onClick={() => openEditModal(student)}>
                     {student.firstName} {student.lastName}
                   </Button>
                 </TableCell>
@@ -102,14 +104,15 @@ const StudentManagementModal = () => {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSave={handleAdd}
+        existingStudents={students}
       />
 
       <EditStudentFormModal
         open={editOpen}
         onClose={() => setEditOpen(false)}
         student={selectedStudent}
-        existingStudents={students}
         onSave={handleEdit}
+        existingStudents={students}
       />
     </Box>
   );

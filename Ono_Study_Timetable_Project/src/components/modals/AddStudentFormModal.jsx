@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   TextField,
   Stack,
@@ -9,33 +9,20 @@ import PopupModal from "../UI/PopupModal";
 import { hashPassword } from "../../utils/hash";
 import { validateStudentForm } from "../../utils/validateForm";
 
-const EditStudentFormModal = ({ open, onClose, student, onSave, existingStudents = [] }) => {
+const AddStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) => {
   const [formData, setFormData] = useState({
     id: "",
     firstName: "",
     lastName: "",
     email: "",
     username: "",
+    password: "",
+    confirmPassword: "",
     phone: "",
-    password: "", // סיסמה חדשה אופציונלית
   });
 
   const [errors, setErrors] = useState({});
   const [generalError, setGeneralError] = useState("");
-
-  useEffect(() => {
-    if (student) {
-      setFormData({
-        id: student.id || "",
-        firstName: student.firstName || "",
-        lastName: student.lastName || "",
-        email: student.email || "",
-        username: student.username || "",
-        phone: student.phone || "",
-        password: "", // שדה ריק עד שהמשתמש מזין
-      });
-    }
-  }, [student]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -43,28 +30,34 @@ const EditStudentFormModal = ({ open, onClose, student, onSave, existingStudents
   };
 
   const handleSubmit = async () => {
-    const others = existingStudents.filter((s) => s.id !== student.id);
-    const validationErrors = validateStudentForm(formData, others, { skipPassword: true });
+    const validationErrors = validateStudentForm(formData, existingStudents);
     setErrors(validationErrors);
 
     if (Object.keys(validationErrors).length > 0) {
-      setGeneralError("Please fix the errors before saving.");
+      setGeneralError("Please fix the errors before submitting.");
       return;
     }
 
-    const updatedStudent = {
-      ...student,
+    const hashedPassword = await hashPassword(formData.password);
+
+    const studentToSave = {
       ...formData,
+      password: hashedPassword,
     };
+    delete studentToSave.confirmPassword;
 
-    if (formData.password?.trim()) {
-      updatedStudent.password = await hashPassword(formData.password);
-    } else {
-      delete updatedStudent.password;
-    }
+    if (onSave) onSave(studentToSave);
 
-    if (onSave) onSave(updatedStudent);
-
+    setFormData({
+      id: "",
+      firstName: "",
+      lastName: "",
+      email: "",
+      username: "",
+      password: "",
+      confirmPassword: "",
+      phone: "",
+    });
     setErrors({});
     setGeneralError("");
     onClose();
@@ -74,12 +67,8 @@ const EditStudentFormModal = ({ open, onClose, student, onSave, existingStudents
     <PopupModal
       open={open}
       onClose={onClose}
-      title="Edit Student"
-      actions={
-        <Button variant="contained" onClick={handleSubmit}>
-          Save Changes
-        </Button>
-      }
+      title="Add New Student"
+      actions={<Button variant="contained" onClick={handleSubmit}>Save</Button>}
     >
       <Stack spacing={2} mt={1}>
         {generalError && <Alert severity="error">{generalError}</Alert>}
@@ -102,11 +91,14 @@ const EditStudentFormModal = ({ open, onClose, student, onSave, existingStudents
         <TextField label="Username" name="username" value={formData.username}
           onChange={handleChange} error={!!errors.username} helperText={errors.username} fullWidth />
 
-        <TextField label="New Password" name="password" type="password" value={formData.password} 
-          onChange={handleChange} fullWidth />
+        <TextField label="Password" name="password" type="password" value={formData.password}
+          onChange={handleChange} error={!!errors.password} helperText={errors.password} fullWidth />
+
+        <TextField label="Confirm Password" name="confirmPassword" type="password" value={formData.confirmPassword}
+          onChange={handleChange} error={!!errors.confirmPassword} helperText={errors.confirmPassword} fullWidth />
       </Stack>
     </PopupModal>
   );
 };
 
-export default EditStudentFormModal;
+export default AddStudentFormModal;

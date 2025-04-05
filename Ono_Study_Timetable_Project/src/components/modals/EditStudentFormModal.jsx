@@ -76,8 +76,8 @@ const AddStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) =
       <Stack spacing={2} mt={1}>
         {generalError && <Alert severity="error">{generalError}</Alert>}
 
-        <TextField label="Student ID" name="id" value={formData.id} onChange={handleChange}
-          error={!!errors.id} helperText={errors.id} fullWidth />
+        <TextField label="Student ID" name="id" value={formData.id}
+          InputProps={{ readOnly: true }} fullWidth />
 
         <TextField label="First Name" name="firstName" value={formData.firstName}
           onChange={handleChange} error={!!errors.firstName} helperText={errors.firstName} fullWidth />
