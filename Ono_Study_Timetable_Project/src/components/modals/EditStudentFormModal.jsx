@@ -8,8 +8,9 @@ import {
 import PopupModal from "../UI/PopupModal";
 import { hashPassword } from "../../utils/hash";
 import { validateStudentForm } from "../../utils/validateForm";
+import { saveRecord } from "../../utils/storage";
 
-const AddStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) => {
+const EditStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) => {
   const [formData, setFormData] = useState({
     id: "",
     firstName: "",
@@ -30,7 +31,7 @@ const AddStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) =
   };
 
   const handleSubmit = async () => {
-    const validationErrors = validateStudentForm(formData, existingStudents);
+    const validationErrors = validateStudentForm(formData, existingStudents, { skipPassword: !formData.password });
     setErrors(validationErrors);
 
     if (Object.keys(validationErrors).length > 0) {
@@ -39,14 +40,15 @@ const AddStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) =
     }
 
     try {
-      const hashedPassword = await hashPassword(formData.password);
+      const hashedPassword = formData.password ? await hashPassword(formData.password) : undefined;
       const studentToSave = {
         ...formData,
-        password: hashedPassword,
+        ...(hashedPassword && { password: hashedPassword }),
       };
       delete studentToSave.confirmPassword;
 
       if (onSave) onSave(studentToSave);
+      saveRecord("students", studentToSave);
 
       setFormData({
         id: "",
@@ -70,7 +72,7 @@ const AddStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) =
     <PopupModal
       open={open}
       onClose={onClose}
-      title="Add New Student"
+      title="Edit Student"
       actions={<Button variant="contained" onClick={handleSubmit}>Save</Button>}
     >
       <Stack spacing={2} mt={1}>
@@ -104,4 +106,4 @@ const AddStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) =
   );
 };
 
-export default AddStudentFormModal;
+export default EditStudentFormModal;

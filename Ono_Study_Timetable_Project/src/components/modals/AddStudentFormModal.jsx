@@ -8,6 +8,7 @@ import {
 import PopupModal from "../UI/PopupModal";
 import { hashPassword } from "../../utils/hash";
 import { validateStudentForm } from "../../utils/validateForm";
+import { saveRecord } from "../../utils/storage";
 
 const AddStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) => {
   const [formData, setFormData] = useState({
@@ -47,6 +48,7 @@ const AddStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) =
     delete studentToSave.confirmPassword;
 
     if (onSave) onSave(studentToSave);
+    saveRecord("students", studentToSave);
 
     setFormData({
       id: "",
