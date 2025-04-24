@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import BigCalendar from "../components/calendar/BigCalendar";
-import StudentPersonalEventFormModal from "../components/forms/StudentPersonalEventFormModal";
+import StudentPersonalEventFormModal from "../components/modals/StudentPersonalEventFormModal";
 
 export default function TimeTableCalendarViewPage() {
   const [events, setEvents] = useState([]);

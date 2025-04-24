@@ -58,7 +58,7 @@ const dummyData = {
         startDate: "2025-05-10",
         endDate: "2025-05-12",
       },
-    ],
+    ],    
     tasks: [
       {
         assignmentCode: "T1",
@@ -75,6 +75,36 @@ const dummyData = {
         localStorage.setItem(key, JSON.stringify(value));
       }
     });
+    // Prepare allEvents list for calendar
+    const studentEvents = JSON.parse(localStorage.getItem("studentEvents") || "[]");
+    const events = (dummyData.events || []).map(e => ({
+      ...e,
+      title: e.eventName,
+      type: "event",
+      start: new Date(`${e.startDate || e.date}T08:00`),
+      end: new Date(`${e.endDate || e.date}T16:00`),
+    }));
+
+    const holidays = (dummyData.holidays || []).map(h => ({
+      ...h,
+      title: h.holidayName,
+      type: "holiday",
+      start: new Date(`${h.date}T00:00`),
+      end: new Date(`${h.date}T23:59`),
+    }));
+
+    const vacations = (dummyData.vacations || []).map(v => ({
+      ...v,
+      title: v.vacationName,
+      type: "vacation",
+      start: new Date(`${v.startDate}T00:00`),
+      end: new Date(`${v.endDate}T23:59`),
+    }));
+
+    const allEvents = [...studentEvents, ...events, ...holidays, ...vacations];
+
+    // Save allEvents in one key
+    localStorage.setItem("allEvents", JSON.stringify(allEvents));
   };
   
   export const resetAndSeedLocalStorage = () => {

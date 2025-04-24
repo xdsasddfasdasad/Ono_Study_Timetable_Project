@@ -4,6 +4,7 @@ import { seedLocalStorage } from "./utils/seedData";
 
 if (process.env.NODE_ENV === "development") {
   seedLocalStorage();
+  window.seed = () => seedLocalStorage(true);
 }
 
 function App() {
