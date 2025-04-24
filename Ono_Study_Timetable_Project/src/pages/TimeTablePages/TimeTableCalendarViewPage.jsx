@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
-import BigCalendar from "../components/calendar/BigCalendar";
-import StudentPersonalEventFormModal from "../components/modals/StudentPersonalEventFormModal";
+import React, { useState, useEffect } from "react";
+import BigCalendar from "../../components/calendar/BigCalendar";
+import StudentPersonalEventFormModal from "../../components/modals/StudentPersonalEventFormModal";
 
 export default function TimeTableCalendarViewPage() {
   const [events, setEvents] = useState([]);
@@ -8,31 +8,24 @@ export default function TimeTableCalendarViewPage() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [defaultDate, setDefaultDate] = useState(null);
 
-  // Load and normalize all event types
   useEffect(() => {
-    const load = (key, eventType) =>
-      (JSON.parse(localStorage.getItem(key)) || []).map((e) => ({
+    const user = JSON.parse(localStorage.getItem("loggedInUser"));
+    const all = JSON.parse(localStorage.getItem("studentEvents")) || [];
+
+    const filtered = all
+      .filter((e) => e.ownerId === user?.id)
+      .map((e) => ({
         ...e,
         start: new Date(e.start),
         end: new Date(e.end),
-        eventType,
       }));
 
-    const allEvents = [
-      ...load("studentEvents", "personal"),
-      ...load("onlineClasses", "onlineClass"),
-      ...load("events", "event"),
-      ...load("holidays", "holiday"),
-      ...load("vacations", "vacation"),
-    ];
-
-    setEvents(allEvents);
+    setEvents(filtered);
   }, []);
 
-  const saveToStorage = (updated) => {
-    setEvents(updated);
-    const personal = updated.filter((e) => e.eventType === "personal");
-    localStorage.setItem("studentEvents", JSON.stringify(personal));
+  const saveToStorage = (updatedEvents) => {
+    setEvents(updatedEvents);
+    localStorage.setItem("studentEvents", JSON.stringify(updatedEvents));
   };
 
   const handleSelectSlot = ({ start }) => {
@@ -42,20 +35,18 @@ export default function TimeTableCalendarViewPage() {
   };
 
   const handleSelectEvent = (event) => {
-    if (event.eventType === "personal") {
-      setSelectedEvent(event);
-      setIsModalOpen(true);
-    } else {
-      alert(`Viewing: ${event.title}\n(${event.eventType})`);
-    }
+    setSelectedEvent(event);
+    setIsModalOpen(true);
   };
 
   const handleSaveEvent = (formData) => {
+    const user = JSON.parse(localStorage.getItem("loggedInUser"));
+
     const newEvent = {
       ...formData,
+      ownerId: user?.id,
       start: new Date(`${formData.date}T${formData.startTime}`),
       end: new Date(`${formData.date}T${formData.endTime}`),
-      eventType: "personal",
     };
 
     const updated = selectedEvent
@@ -67,7 +58,7 @@ export default function TimeTableCalendarViewPage() {
   };
 
   const handleDeleteEvent = (eventToDelete) => {
-    const updated = events.filter((e) => e !== eventToDelete);
+    const updated = events.filter((evt) => evt !== eventToDelete);
     saveToStorage(updated);
     setIsModalOpen(false);
   };

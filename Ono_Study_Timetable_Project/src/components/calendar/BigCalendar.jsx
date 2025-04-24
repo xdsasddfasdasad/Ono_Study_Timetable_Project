@@ -1,7 +1,7 @@
 import React from "react";
 import { Calendar, Views } from "react-big-calendar";
 import "react-big-calendar/lib/css/react-big-calendar.css"; // base styles
-import { localizer } from "../../utils/calendar/localizer";
+import localizer from "../../utils/calendar/localizer"; // ✅ תיקון כאן
 
 const BigCalendar = ({ events, onSelectEvent, onSelectSlot }) => {
   return (

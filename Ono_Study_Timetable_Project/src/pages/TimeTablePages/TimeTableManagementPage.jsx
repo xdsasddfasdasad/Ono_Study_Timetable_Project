@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import BigCalendar from "../components/calendar/BigCalendar";
-import TimeTableCalendarManageModal from "../components/modals/TimeTableCalendarManageModal";
+import BigCalendar from "../../components/calendar/BigCalendar";
+import TimeTableCalendarManageModal from "../../components/modals/TimeTableCalendarManageModal";
 
 export default function TimeTableManagementPage() {
   const [events, setEvents] = useState([]);
@@ -8,15 +8,40 @@ export default function TimeTableManagementPage() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [defaultDate, setDefaultDate] = useState(null);
 
-  // Load all events on mount
+  // 🔄 Load all types of events
   useEffect(() => {
-    const stored = JSON.parse(localStorage.getItem("allEvents")) || [];
-    const parsed = stored.map((e) => ({
-      ...e,
-      start: new Date(e.start),
-      end: new Date(e.end),
-    }));
-    setEvents(parsed);
+    const studentEvents = JSON.parse(localStorage.getItem("studentEvents") || "[]");
+    const generalEvents = JSON.parse(localStorage.getItem("events") || "[]");
+    const holidays = JSON.parse(localStorage.getItem("holidays") || "[]");
+    const vacations = JSON.parse(localStorage.getItem("vacations") || "[]");
+
+    const all = [
+      ...studentEvents.map((e) => ({ ...e, title: e.title, type: "student" })),
+      ...generalEvents.map((e) => ({
+        ...e,
+        title: e.eventName,
+        type: "event",
+        start: new Date(`${e.startDate}T08:00`),
+        end: new Date(`${e.endDate}T16:00`),
+      })),
+      ...holidays.map((h) => ({
+        ...h,
+        title: h.holidayName,
+        type: "holiday",
+        start: new Date(`${h.date}T00:00`),
+        end: new Date(`${h.date}T23:59`),
+      })),
+      ...vacations.map((v) => ({
+        ...v,
+        title: v.vacationName,
+        type: "vacation",
+        start: new Date(`${v.startDate}T00:00`),
+        end: new Date(`${v.endDate}T23:59`),
+      })),
+    ];
+
+    setEvents(all);
+    console.log("Loaded events from localStorage:", parsed);
   }, []);
 
   const saveToStorage = (updatedEvents) => {

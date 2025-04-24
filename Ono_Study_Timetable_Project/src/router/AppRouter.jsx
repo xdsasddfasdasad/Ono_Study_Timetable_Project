@@ -13,6 +13,8 @@ import TimeTableCalendarViewPage from "../pages/TimeTablePages/TimeTableCalendar
 import TimeTableListViewPage from "../pages/TimeTablePages/TimeTableListViewPage";
 import TimeTableManagementPage from "../pages/TimeTablePages/TimeTableManagementPage";
 
+import GenerateHashes from "../pages/DevTools/GenerateHashes";
+
 const NotFoundPage = () => (
   <div style={{ padding: "2rem" }}>
     <h1>404 - Page Not Found</h1>
@@ -31,6 +33,7 @@ export default function AppRouter() {
 
         {/* דפים עם Layout */}
         <Route element={<AppLayout />}>
+          <Route path="/generate-hashes" element={<GenerateHashes />} />
           <Route path="/home" element={<HomePage />} />
           <Route path="/help" element={<HelpPage />} />
           <Route path="/students" element={<StudentManagementPage />} />

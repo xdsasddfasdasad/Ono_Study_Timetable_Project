@@ -7,7 +7,8 @@ import {
   Button,
   Divider,
 } from "@mui/material";
-import StudentPersonalEventFormModal from "../components/modals/StudentPersonalEventFormModal";
+import StudentPersonalEventFormModal from "../../components/modals/StudentPersonalEventFormModal";
+
 
 export default function TimeTableListViewPage() {
   const [events, setEvents] = useState([]);
