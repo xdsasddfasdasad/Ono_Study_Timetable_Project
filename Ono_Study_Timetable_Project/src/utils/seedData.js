@@ -1,84 +1,84 @@
-// src/utils/seedData.js
-
 const dummyData = {
     users: [
       {
-        id: "stu001",
-        firstName: "Alice",
-        lastName: "Doe",
-        email: "alice@example.com",
-        username: "alice01",
-        password: "hashed_password_1", // you can use real hashed values if needed
+        id: "admin1",
+        firstName: "Admin",
+        lastName: "User",
+        email: "admin@example.com",
+        username: "adminuser",
+        password: "hashedPassword1",
       },
       {
-        id: "stu002",
-        firstName: "Bob",
-        lastName: "Smith",
-        email: "bob@example.com",
-        username: "bobsmith",
-        password: "hashed_password_2",
+        id: "stud1",
+        firstName: "Student",
+        lastName: "One",
+        email: "student1@example.com",
+        username: "student1",
+        password: "hashedPassword2",
       },
     ],
-  
     years: [
-      { code: "Y1", label: "Year A", yearNumber: "1" },
-      { code: "Y2", label: "Year B", yearNumber: "2" },
+      { code: "Y1", label: "Year A" },
+      { code: "Y2", label: "Year B" },
     ],
-  
     semesters: [
       { semesterCode: "S1", semesterNumber: "1", yearCode: "Y1" },
       { semesterCode: "S2", semesterNumber: "2", yearCode: "Y2" },
     ],
-  
     lecturers: [
       { id: "L1", name: "Dr. Smith" },
-      { id: "L2", name: "Prof. Johnson" },
+      { id: "L2", name: "Prof. Jane" },
     ],
-  
     courses: [
-      { courseCode: "C1", courseName: "Intro to Programming", lecturerId: "L1", semesterCode: "S1" },
-      { courseCode: "C2", courseName: "Algorithms", lecturerId: "L2", semesterCode: "S2" },
+      { courseCode: "C1", courseName: "Intro to React", lecturerId: "L1", semesterCode: "S1" },
+      { courseCode: "C2", courseName: "Data Structures", lecturerId: "L2", semesterCode: "S2" },
     ],
-  
-    tasks: [
-      { assignmentCode: "T1", assignmentName: "Homework 1", courseCode: "C1" },
-      { assignmentCode: "T2", assignmentName: "Final Project", courseCode: "C2" },
-    ],
-  
     rooms: [
-      { roomCode: "R1", roomName: "Room A", siteCode: "ST1" },
-      { roomCode: "R2", roomName: "Room B", siteCode: "ST2" },
+      { roomCode: "R1", roomName: "Room 101", siteCode: "S1" },
+      { roomCode: "R2", roomName: "Room 202", siteCode: "S1" },
     ],
-  
     sites: [
-      { siteCode: "ST1", siteName: "Main Campus" },
-      { siteCode: "ST2", siteName: "Tech Park" },
+      { siteCode: "S1", siteName: "Main Campus" },
     ],
-  
-    onlineClasses: [
+    holidays: [
+      { holidayCode: "H1", holidayName: "New Year's Day", date: "2025-01-01" },
+    ],
+    vacations: [
       {
-        courseCode: "C1",
-        date: "2025-06-01",
-        hourCode: "H1",
-        isOnline: true,
-        link: "https://zoom.us/class-c1",
+        vacationCode: "V1",
+        vacationName: "Summer Break",
+        startDate: "2025-07-01",
+        endDate: "2025-08-31",
       },
     ],
-  
-    personalEvents: [
+    events: [
       {
-        title: "Study Session",
-        date: "2025-06-03",
-        startTime: "14:00",
-        endTime: "16:00",
-        description: "Group study with peers",
+        eventCode: "E1",
+        eventName: "Hackathon",
+        startDate: "2025-05-10",
+        endDate: "2025-05-12",
+      },
+    ],
+    tasks: [
+      {
+        assignmentCode: "T1",
+        assignmentName: "Final Project",
+        courseCode: "C1",
       },
     ],
   };
   
-  export const seedLocalStorage = () => {
+  export const seedLocalStorage = (force = false) => {
     Object.entries(dummyData).forEach(([key, value]) => {
-      localStorage.setItem(key, JSON.stringify(value));
+      const existing = localStorage.getItem(key);
+      if (!existing || force) {
+        localStorage.setItem(key, JSON.stringify(value));
+      }
     });
+  };
+  
+  export const resetAndSeedLocalStorage = () => {
+    localStorage.clear();
+    seedLocalStorage(true);
   };
   
