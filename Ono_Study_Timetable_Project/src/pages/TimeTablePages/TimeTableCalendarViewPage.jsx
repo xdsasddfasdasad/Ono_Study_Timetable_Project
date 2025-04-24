@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import BigCalendar from "../components/calendar/BigCalendar";
 import StudentPersonalEventFormModal from "../components/forms/StudentPersonalEventFormModal";
 
+const STORAGE_KEY = "studentPersonalEvents";
+
 export default function TimeTableCalendarViewPage() {
   const [events, setEvents] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -10,7 +12,7 @@ export default function TimeTableCalendarViewPage() {
 
   // Load from localStorage on mount
   useEffect(() => {
-    const stored = JSON.parse(localStorage.getItem("studentEvents")) || [];
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
     const parsed = stored.map((e) => ({
       ...e,
       start: new Date(e.start),
@@ -19,10 +21,10 @@ export default function TimeTableCalendarViewPage() {
     setEvents(parsed);
   }, []);
 
-  // Save to localStorage whenever events change
+  // Save and update events
   const saveToStorage = (updatedEvents) => {
     setEvents(updatedEvents);
-    localStorage.setItem("studentEvents", JSON.stringify(updatedEvents));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedEvents));
   };
 
   const handleSelectSlot = ({ start }) => {
@@ -33,28 +35,22 @@ export default function TimeTableCalendarViewPage() {
 
   const handleSelectEvent = (event) => {
     setSelectedEvent(event);
+    setDefaultDate(null);
     setIsModalOpen(true);
   };
 
-  const handleSaveEvent = (formData) => {
-    const newEvent = {
-      ...formData,
-      start: new Date(`${formData.date}T${formData.startTime}`),
-      end: new Date(`${formData.date}T${formData.endTime}`),
-    };
-
-    const updated = selectedEvent
-      ? events.map((evt) => (evt === selectedEvent ? newEvent : evt))
-      : [...events, newEvent];
-
-    saveToStorage(updated);
+  const handleSaveEvent = () => {
+    // reload from storage after save/delete handled inside modal
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    const parsed = stored.map((e) => ({
+      ...e,
+      start: new Date(e.start),
+      end: new Date(e.end),
+    }));
+    setEvents(parsed);
     setIsModalOpen(false);
-  };
-
-  const handleDeleteEvent = (eventToDelete) => {
-    const updated = events.filter((evt) => evt !== eventToDelete);
-    saveToStorage(updated);
-    setIsModalOpen(false);
+    setSelectedEvent(null);
+    setDefaultDate(null);
   };
 
   return (
@@ -69,7 +65,6 @@ export default function TimeTableCalendarViewPage() {
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveEvent}
-        onDelete={handleDeleteEvent}
         defaultDate={defaultDate}
         selectedEvent={selectedEvent}
       />
