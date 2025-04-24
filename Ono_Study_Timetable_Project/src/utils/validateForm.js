@@ -135,11 +135,38 @@ export const validateOnlineClassForm = (formData) => {
   return errors;
 };
 
-export const validatePersonalEventForm = (formData) => {
+export const validatePersonalEventForm = (formData, existingEvents = []) => {
   const errors = {};
-  if (!formData.title?.trim()) errors.title = "Title is required.";
-  if (!formData.date?.trim()) errors.date = "Date is required.";
-  if (!formData.startTime?.trim()) errors.startTime = "Start time is required.";
-  if (!formData.endTime?.trim()) errors.endTime = "End time is required.";
+  const { title, date, startTime, endTime } = formData;
+
+  if (!title?.trim()) errors.title = "Title is required.";
+  if (!date?.trim()) errors.date = "Date is required.";
+  if (!startTime?.trim()) errors.startTime = "Start time is required.";
+  if (!endTime?.trim()) errors.endTime = "End time is required.";
+
+  const start = new Date(`${date}T${startTime}`);
+  const end = new Date(`${date}T${endTime}`);
+
+  if (start >= end) {
+    errors.endTime = "End time must be after start time.";
+  }
+
+  // Check for overlaps
+  const overlap = existingEvents.some((ev) => {
+    if (ev.date !== date || ev.title === title) return false;
+
+    const evStart = new Date(`${ev.date}T${ev.startTime}`);
+    const evEnd = new Date(`${ev.date}T${ev.endTime}`);
+
+    return (start < evEnd && end > evStart);
+  });
+
+  if (overlap) {
+    errors.startTime = "This time overlaps with an existing event.";
+    errors.endTime = "This time overlaps with an existing event.";
+  }
+
   return errors;
 };
+
+
