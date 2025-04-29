@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { TextField, Stack, Button, Typography } from "@mui/material";
-import PopupModal from "../UI/PopupModal";
-import CustomButton from "../UI/CustomButton";
-import { validatePersonalEventForm } from "../../utils/validateForm";
-import { getRecords, saveRecord } from "../../utils/storage";
+import PopupModal from "../../UI/PopupModal";
+import CustomButton from "../../UI/CustomButton";
+import { validatePersonalEventForm } from "../../../utils/validateForm";
+import { getRecords, saveRecord } from "../../../utils/storage";
 
 const EVENT_STORAGE_KEY = "studentPersonalEvents";
 

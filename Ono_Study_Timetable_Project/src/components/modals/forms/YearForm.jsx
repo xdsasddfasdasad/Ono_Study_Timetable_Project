@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { TextField, Stack, Box, Typography } from "@mui/material";
 import { validateYearForm } from "../../../utils/validateForm";
-import { saveRecord, getRecords } from "../../../utils/storage";
+import { saveRecord, updateRecord, getRecords } from "../../../utils/storage"; // Important: added updateRecord
 import CustomButton from "../../UI/CustomButton";
 
 export default function YearForm({ formData, onChange, onClose, onSave }) {
@@ -9,46 +9,62 @@ export default function YearForm({ formData, onChange, onClose, onSave }) {
     yearNumber: "",
     startDate: "",
     endDate: "",
+    semesters: [],
   });
 
   const [localErrors, setLocalErrors] = useState({});
 
   useEffect(() => {
-    if (formData) setLocalForm(formData);
+    if (formData) {
+      setLocalForm((prev) => ({
+        ...prev,
+        ...formData,
+        semesters: formData.semesters || [],
+      }));
+    }
   }, [formData]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setLocalForm((prev) => ({ ...prev, [name]: value }));
-    setLocalErrors((prevErrors) => ({ ...prevErrors, [name]: undefined })); // clear field error on change
+    setLocalErrors((prevErrors) => ({ ...prevErrors, [name]: undefined }));
   };
 
   const handleSubmit = () => {
     const preparedData = {
       ...localForm,
-      yearCode: `Y${localForm.yearNumber.trim()}`,
-      label: `Year ${localForm.yearNumber.trim()}`,
+      yearCode: localForm.yearCode || `Y${localForm.yearNumber.trim()}`,
+      label: localForm.label || `Year ${localForm.yearNumber.trim()}`,
+      semesters: localForm.semesters || [],
     };
 
     const existingYears = getRecords("years") || [];
-    const validationErrors = validateYearForm(localForm, existingYears);
+    const validationErrors = validateYearForm(preparedData, existingYears);
 
     if (Object.keys(validationErrors).length > 0) {
-      setLocalErrors(validationErrors); // Update local error state
+      setLocalErrors(validationErrors);
       return;
     }
 
-    // Passed validation
-    saveRecord("years", preparedData);
+    // Check if this is a new record or update existing
+    const isEdit = !!localForm.yearCode && existingYears.some((y) => y.yearCode === localForm.yearCode);
+
+    if (isEdit) {
+      updateRecord("years", "yearCode", preparedData);
+    } else {
+      saveRecord("years", preparedData);
+    }
+
     if (onSave) onSave(preparedData);
-    setLocalForm({ yearNumber: "", startDate: "", endDate: "" }); // Reset form
-    setLocalErrors({}); // Clear errors after successful save
+
+    setLocalForm({ yearNumber: "", startDate: "", endDate: "", semesters: [] });
+    setLocalErrors({});
     onClose?.();
   };
 
   return (
     <Stack spacing={3}>
-      {/* --- Year Info Section --- */}
+      {/* Year Info */}
       <Box sx={{ border: "1px solid #ccc", borderRadius: 2, p: 2, position: "relative" }}>
         <Typography
           variant="subtitle2"
@@ -64,7 +80,6 @@ export default function YearForm({ formData, onChange, onClose, onSave }) {
         >
           Year Information
         </Typography>
-
         <Stack spacing={2}>
           <TextField
             label="Year Number"
@@ -78,7 +93,7 @@ export default function YearForm({ formData, onChange, onClose, onSave }) {
         </Stack>
       </Box>
 
-      {/* --- Year Dates Section --- */}
+      {/* Year Dates */}
       <Box sx={{ border: "1px solid #ccc", borderRadius: 2, p: 2, position: "relative" }}>
         <Typography
           variant="subtitle2"
@@ -121,7 +136,9 @@ export default function YearForm({ formData, onChange, onClose, onSave }) {
         </Stack>
       </Box>
 
-      <CustomButton onClick={handleSubmit}>Save Year</CustomButton>
+      <CustomButton onClick={handleSubmit}>
+        {localForm.yearCode ? "Update Year" : "Save Year"}
+      </CustomButton>
     </Stack>
   );
 }

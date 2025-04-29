@@ -4,8 +4,8 @@ import {
   TableCell, TableContainer, TableHead, TableRow, Typography, Stack,
 } from "@mui/material";
 import { Delete, Edit } from "@mui/icons-material";
-import AddStudentFormModal from "./AddStudentFormModal";
-import EditStudentFormModal from "./EditStudentFormModal";
+import AddStudentFormModal from "./forms/AddStudentFormModal";
+import EditStudentFormModal from "./forms/EditStudentFormModal";
 
 const StudentManagementModal = () => {
   const [students, setStudents] = useState([]);

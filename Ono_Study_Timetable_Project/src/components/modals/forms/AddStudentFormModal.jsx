@@ -5,12 +5,12 @@ import {
   Button,
   Alert,
 } from "@mui/material";
-import PopupModal from "../UI/PopupModal";
-import { hashPassword } from "../../utils/hash";
-import { validateStudentForm } from "../../utils/validateForm";
-import { saveRecord } from "../../utils/storage";
+import PopupModal from "../../UI/PopupModal";
+import { hashPassword } from "../../../utils/hash";
+import { validateStudentForm } from "../../../utils/validateForm";
+import { saveRecord } from "../../../utils/storage";
 
-const EditStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) => {
+const AddStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) => {
   const [formData, setFormData] = useState({
     id: "",
     firstName: "",
@@ -31,7 +31,7 @@ const EditStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) 
   };
 
   const handleSubmit = async () => {
-    const validationErrors = validateStudentForm(formData, existingStudents, { skipPassword: !formData.password });
+    const validationErrors = validateStudentForm(formData, existingStudents);
     setErrors(validationErrors);
 
     if (Object.keys(validationErrors).length > 0) {
@@ -39,47 +39,44 @@ const EditStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) 
       return;
     }
 
-    try {
-      const hashedPassword = formData.password ? await hashPassword(formData.password) : undefined;
-      const studentToSave = {
-        ...formData,
-        ...(hashedPassword && { password: hashedPassword }),
-      };
-      delete studentToSave.confirmPassword;
+    const hashedPassword = await hashPassword(formData.password);
 
-      if (onSave) onSave(studentToSave);
-      saveRecord("students", studentToSave);
+    const studentToSave = {
+      ...formData,
+      password: hashedPassword,
+    };
+    delete studentToSave.confirmPassword;
 
-      setFormData({
-        id: "",
-        firstName: "",
-        lastName: "",
-        email: "",
-        username: "",
-        password: "",
-        confirmPassword: "",
-        phone: "",
-      });
-      setErrors({});
-      setGeneralError("");
-      onClose();
-    } catch (error) {
-      setGeneralError("An error occurred while processing the form.");
-    }
+    if (onSave) onSave(studentToSave);
+    saveRecord("students", studentToSave);
+
+    setFormData({
+      id: "",
+      firstName: "",
+      lastName: "",
+      email: "",
+      username: "",
+      password: "",
+      confirmPassword: "",
+      phone: "",
+    });
+    setErrors({});
+    setGeneralError("");
+    onClose();
   };
 
   return (
     <PopupModal
       open={open}
       onClose={onClose}
-      title="Edit Student"
+      title="Add New Student"
       actions={<Button variant="contained" onClick={handleSubmit}>Save</Button>}
     >
       <Stack spacing={2} mt={1}>
         {generalError && <Alert severity="error">{generalError}</Alert>}
 
         <TextField label="Student ID" name="id" value={formData.id}
-          InputProps={{ readOnly: true }} fullWidth />
+          onChange={handleChange} error={!!errors.id} helperText={errors.id} fullWidth />
 
         <TextField label="First Name" name="firstName" value={formData.firstName}
           onChange={handleChange} error={!!errors.firstName} helperText={errors.firstName} fullWidth />
@@ -106,4 +103,4 @@ const EditStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) 
   );
 };
 
-export default EditStudentFormModal;
+export default AddStudentFormModal;

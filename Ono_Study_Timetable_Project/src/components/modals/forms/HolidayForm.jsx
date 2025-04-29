@@ -24,7 +24,7 @@ export default function HolidayForm({ formData, onChange, errors, onClose, onSav
       <TextField
         label="Holiday Code"
         name="holidayCode"
-        value={formData.holidayCode}
+        value={formData.holidayCode || ""}
         onChange={onChange}
         error={!!errors.holidayCode}
         helperText={errors.holidayCode}
@@ -33,20 +33,41 @@ export default function HolidayForm({ formData, onChange, errors, onClose, onSav
       <TextField
         label="Holiday Name"
         name="holidayName"
-        value={formData.holidayName}
+        value={formData.holidayName || ""}
         onChange={onChange}
         error={!!errors.holidayName}
         helperText={errors.holidayName}
         fullWidth
       />
       <TextField
-        label="Date"
-        name="date"
+        label="Start Date"
+        name="startDate"
         type="date"
-        value={formData.date}
+        value={formData.startDate || ""}
         onChange={onChange}
-        error={!!errors.date}
-        helperText={errors.date}
+        error={!!errors.startDate}
+        helperText={errors.startDate}
+        fullWidth
+        InputLabelProps={{ shrink: true }}
+      />
+      <TextField
+        label="End Date"
+        name="endDate"
+        type="date"
+        value={formData.endDate || ""}
+        onChange={onChange}
+        error={!!errors.endDate}
+        helperText={errors.endDate}
+        fullWidth
+        InputLabelProps={{ shrink: true }}
+      />
+      <TextField
+        label="Notes"
+        name="notes"
+        value={formData.notes || ""}
+        onChange={onChange}
+        multiline
+        rows={2}
         fullWidth
       />
       <CustomButton onClick={handleSubmit}>Save Holiday</CustomButton>

@@ -1,3 +1,5 @@
+// src/pages/TimeTablePages/TimeTableListViewPage.jsx
+
 import React, { useEffect, useState } from "react";
 import {
   Card,
@@ -5,20 +7,23 @@ import {
   Typography,
   Stack,
   Button,
-  Divider,
 } from "@mui/material";
-import StudentPersonalEventFormModal from "../../components/modals/StudentPersonalEventFormModal";
-
+import StudentPersonalEventFormModal from "../../components/modals/forms/StudentPersonalEventFormModal";
+import {
+  handleEntityFormSubmit,
+  handleUpdateEntityFormSubmit,
+  handleDeleteEntityFormSubmit
+} from "../../handlers/formHandlers";
+import { getRecords } from "../../utils/storage";
 
 export default function TimeTableListViewPage() {
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Load and normalize all event types
-  useEffect(() => {
+  const loadEvents = () => {
     const load = (key, eventType) =>
-      (JSON.parse(localStorage.getItem(key)) || []).map((e) => ({
+      (getRecords(key) || []).map((e) => ({
         ...e,
         start: new Date(e.start),
         end: new Date(e.end),
@@ -34,6 +39,10 @@ export default function TimeTableListViewPage() {
     ];
 
     setEvents(allEvents);
+  };
+
+  useEffect(() => {
+    loadEvents();
   }, []);
 
   const handleEdit = (event) => {
@@ -42,32 +51,46 @@ export default function TimeTableListViewPage() {
   };
 
   const handleDelete = (eventToDelete) => {
-    const updated = events.filter((e) => e !== eventToDelete);
-    setEvents(updated);
-    localStorage.setItem("studentEvents", JSON.stringify(
-      updated.filter((e) => e.eventType === "personal")
-    ));
+    if (!eventToDelete?.id) return;
+
+    handleDeleteEntityFormSubmit(
+      "studentEvents",
+      eventToDelete.id,
+      () => {
+        alert("Event deleted successfully!");
+        loadEvents();
+      },
+      (msg) => alert(msg)
+    );
   };
 
-  const handleSave = (formData) => {
-    const newEvent = {
+  const handleSave = async (formData) => {
+    const isEdit = selectedEvent && selectedEvent.id;
+    const payload = {
       ...formData,
+      id: formData.id || Date.now().toString(),
       start: new Date(`${formData.date}T${formData.startTime}`),
       end: new Date(`${formData.date}T${formData.endTime}`),
       eventType: "personal",
     };
 
-    const updated = selectedEvent
-      ? events.map((e) => (e === selectedEvent ? newEvent : e))
-      : [...events, newEvent];
+    const successCallback = (msg) => {
+      alert(msg);
+      setIsModalOpen(false);
+      setSelectedEvent(null);
+      loadEvents();
+    };
 
-    setEvents(updated);
-    localStorage.setItem(
-      "studentEvents",
-      JSON.stringify(updated.filter((e) => e.eventType === "personal"))
-    );
+    const errorCallback = (msg, errors) => {
+      alert(msg);
+      // You can optionally manage form errors here if needed
+    };
 
-    setIsModalOpen(false);
+    if (isEdit) {
+      await handleUpdateEntityFormSubmit("studentEvents", payload, successCallback, errorCallback);
+    } else {
+      await handleEntityFormSubmit("studentEvents", payload, successCallback, errorCallback);
+    }
   };
 
   return (

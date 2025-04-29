@@ -10,7 +10,7 @@ import {
   MenuItem,
 } from "@mui/material";
 import { validateSemesterForm } from "../../../utils/validateForm";
-import { saveRecord, getRecords } from "../../../utils/storage";
+import { getRecords, saveRecords } from "../../../utils/storage";
 import CustomButton from "../../UI/CustomButton";
 
 export default function SemesterForm({ formData, onClose, onSave, options }) {
@@ -19,50 +19,76 @@ export default function SemesterForm({ formData, onClose, onSave, options }) {
     yearCode: "",
     startDate: "",
     endDate: "",
+    semesterCode: "", // useful for edit detection
   });
 
   const [localErrors, setLocalErrors] = useState({});
 
   useEffect(() => {
-    if (formData) setLocalForm(formData);
+    if (formData) {
+      setLocalForm((prev) => ({
+        ...prev,
+        ...formData,
+        semesterCode: formData.semesterCode || `S${formData.semesterNumber}`,
+      }));
+    }
   }, [formData]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setLocalForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setLocalForm((prev) => ({ ...prev, [name]: value }));
     setLocalErrors((prevErrors) => ({ ...prevErrors, [name]: undefined }));
   };
 
   const handleSubmit = () => {
+    const semesterCode = localForm.semesterCode || `S${localForm.semesterNumber}`;
     const preparedData = {
       ...localForm,
-      semesterCode: `S${localForm.semesterNumber}`,
+      semesterCode,
     };
 
-    const existingSemesters = getRecords("semesters") || [];
-    const yearRecord = options?.years?.find((year) => year.yearCode === localForm.yearCode) || null;
+    const years = getRecords("years") || [];
+    const yearIndex = years.findIndex((y) => y.yearCode === localForm.yearCode);
+    const year = years[yearIndex];
 
-    const validationErrors = validateSemesterForm(localForm, existingSemesters, yearRecord);
+    if (!year) {
+      setLocalErrors({ yearCode: "Year not found" });
+      return;
+    }
+
+    const existingSemesters = year.semesters || [];
+
+    const validationErrors = validateSemesterForm(preparedData, existingSemesters, year);
 
     if (Object.keys(validationErrors).length > 0) {
       setLocalErrors(validationErrors);
       return;
     }
 
-    // Passed validation
-    saveRecord("semesters", preparedData);
+    const isEdit = existingSemesters.some((s) => s.semesterCode === preparedData.semesterCode);
+
+    const updatedSemesters = isEdit
+      ? existingSemesters.map((s) =>
+          s.semesterCode === preparedData.semesterCode ? preparedData : s
+        )
+      : [...existingSemesters, preparedData];
+
+    years[yearIndex] = {
+      ...year,
+      semesters: updatedSemesters,
+    };
+
+    saveRecords("years", years);
+
     if (onSave) onSave(preparedData);
-    setLocalForm({ semesterNumber: "", yearCode: "", startDate: "", endDate: "" });
+    setLocalForm({ semesterNumber: "", yearCode: "", startDate: "", endDate: "", semesterCode: "" });
     setLocalErrors({});
     onClose?.();
   };
 
   return (
     <Stack spacing={3}>
-      {/* --- Semester Information --- */}
+      {/* --- Semester Info --- */}
       <Box sx={{ border: "1px solid #ccc", borderRadius: 2, p: 2, position: "relative" }}>
         <Typography
           variant="subtitle2"
@@ -113,7 +139,7 @@ export default function SemesterForm({ formData, onClose, onSave, options }) {
         </Stack>
       </Box>
 
-      {/* --- Semester Dates --- */}
+      {/* --- Dates --- */}
       <Box sx={{ border: "1px solid #ccc", borderRadius: 2, p: 2, position: "relative" }}>
         <Typography
           variant="subtitle2"
@@ -156,7 +182,9 @@ export default function SemesterForm({ formData, onClose, onSave, options }) {
         </Stack>
       </Box>
 
-      <CustomButton onClick={handleSubmit}>Save Semester</CustomButton>
+      <CustomButton onClick={handleSubmit}>
+        {localForm.semesterCode ? "Update Semester" : "Save Semester"}
+      </CustomButton>
     </Stack>
   );
 }
