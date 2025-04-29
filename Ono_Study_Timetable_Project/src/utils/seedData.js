@@ -1,6 +1,7 @@
 // src/utils/seedData.js
 import { hashPassword } from "./hash";
 
+//  1. Define dummyData first
 const dummyData = {
   students: [
     {
@@ -21,12 +22,12 @@ const dummyData = {
     },
   ],
   years: [
-    { code: "Y1", label: "Year A" },
-    { code: "Y2", label: "Year B" },
+    { yearCode: "Y1", label: "Year 1", yearNumber: "1", startDate: "2025-09-01", endDate: "2026-06-30" },
+    { yearCode: "Y2", label: "Year 2", yearNumber: "2", startDate: "2026-09-01", endDate: "2027-06-30" },
   ],
   semesters: [
-    { semesterCode: "S1", semesterNumber: "1", yearCode: "Y1" },
-    { semesterCode: "S2", semesterNumber: "2", yearCode: "Y2" },
+    { semesterCode: "S1", semesterNumber: "1", yearCode: "Y1", startDate: "2025-01-01", endDate: "2025-06-30" },
+    { semesterCode: "S2", semesterNumber: "2", yearCode: "Y1", startDate: "2025-07-01", endDate: "2025-12-31" },
   ],
   lecturers: [
     { id: "L1", name: "Dr. Smith" },
@@ -40,8 +41,12 @@ const dummyData = {
     { roomCode: "R1", roomName: "Room 101", siteCode: "S1" },
     { roomCode: "R2", roomName: "Room 202", siteCode: "S1" },
   ],
-  sites: [{ siteCode: "S1", siteName: "Main Campus" }],
-  holidays: [{ holidayCode: "H1", holidayName: "New Year's Day", date: "2025-01-01" }],
+  sites: [
+    { siteCode: "S1", siteName: "Main Campus" },
+  ],
+  holidays: [
+    { holidayCode: "H1", holidayName: "New Year's Day", date: "2025-01-01" },
+  ],
   vacations: [
     {
       vacationCode: "V1",
@@ -67,8 +72,11 @@ const dummyData = {
   ],
 };
 
+//
+// 2. Define seedLocalStorage
+//
 export const seedLocalStorage = async (force = false) => {
-  // ✅ Hash student passwords before saving
+  // Hash passwords for students
   const hashedStudents = await Promise.all(
     dummyData.students.map(async (student) => {
       const hashed = await hashPassword(student.password);
@@ -76,12 +84,12 @@ export const seedLocalStorage = async (force = false) => {
     })
   );
 
-  // ✅ Store hashed students
+  // Store students
   if (force || !localStorage.getItem("students")) {
     localStorage.setItem("students", JSON.stringify(hashedStudents));
   }
 
-  // ✅ Store other entities
+  // Store other entities (years, semesters, lecturers, courses, etc.)
   Object.entries(dummyData).forEach(([key, value]) => {
     if (key === "students") return; // already handled
     const existing = localStorage.getItem(key);
@@ -90,43 +98,98 @@ export const seedLocalStorage = async (force = false) => {
     }
   });
 
-  // ✅ Create allEvents
+  //
+  // Create allEvents
+  //
   const studentEvents = JSON.parse(localStorage.getItem("studentEvents") || "[]");
 
   const events = (dummyData.events || []).map((e) => ({
-    ...e,
+    id: e.eventCode,
     title: e.eventName,
     type: "event",
-    start: new Date(`${e.startDate || e.date}T08:00`),
-    end: new Date(`${e.endDate || e.date}T16:00`),
+    start: new Date(`${e.startDate}T08:00`),
+    end: new Date(`${e.endDate}T16:00`),
+    allDay: true,
   }));
 
   const holidays = (dummyData.holidays || []).map((h) => ({
-    ...h,
+    id: h.holidayCode,
     title: h.holidayName,
     type: "holiday",
     start: new Date(`${h.date}T00:00`),
     end: new Date(`${h.date}T23:59`),
+    allDay: true,
   }));
 
   const vacations = (dummyData.vacations || []).map((v) => ({
-    ...v,
+    id: v.vacationCode,
     title: v.vacationName,
     type: "vacation",
     start: new Date(`${v.startDate}T00:00`),
     end: new Date(`${v.endDate}T23:59`),
+    allDay: true,
   }));
 
-  const allEvents = [...studentEvents, ...events, ...holidays, ...vacations];
+  const years = (dummyData.years || []).flatMap((y, index) => ([
+    {
+      id: `year-start-${index}`,
+      title: `Year ${y.yearNumber} Start`,
+      type: "year",
+      start: new Date(`${y.startDate}T00:00`),
+      end: new Date(`${y.startDate}T23:59`),
+      allDay: true,
+    },
+    {
+      id: `year-end-${index}`,
+      title: `Year ${y.yearNumber} End`,
+      type: "year",
+      start: new Date(`${y.endDate}T00:00`),
+      end: new Date(`${y.endDate}T23:59`),
+      allDay: true,
+    }
+  ]));
+
+  const semesters = (dummyData.semesters || []).flatMap((s, index) => ([
+    {
+      id: `semester-start-${index}`,
+      title: `Semester ${s.semesterNumber} Start`,
+      type: "semester",
+      start: new Date(`${s.startDate}T00:00`),
+      end: new Date(`${s.startDate}T23:59`),
+      allDay: true,
+    },
+    {
+      id: `semester-end-${index}`,
+      title: `Semester ${s.semesterNumber} End`,
+      type: "semester",
+      start: new Date(`${s.endDate}T00:00`),
+      end: new Date(`${s.endDate}T23:59`),
+      allDay: true,
+    }
+  ]));
+
+  const allEvents = [
+    ...studentEvents,
+    ...events,
+    ...holidays,
+    ...vacations,
+    ...years,
+    ...semesters,
+  ];
+
   localStorage.setItem("allEvents", JSON.stringify(allEvents));
 };
 
+//
+// 3. Define resetAndSeedLocalStorage
+//
 export const resetAndSeedLocalStorage = async () => {
   localStorage.clear();
   await seedLocalStorage(true);
 };
 
-// At the end of seedData.js
+//
+// 4. Expose to window (for easy dev tools testing)
+//
 window.seedLocalStorage = seedLocalStorage;
 window.resetAndSeedLocalStorage = resetAndSeedLocalStorage;
-

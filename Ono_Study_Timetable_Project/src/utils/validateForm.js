@@ -46,27 +46,73 @@ export const validateStudentForm = (formData, existingStudents = [], options = {
   return errors;
 };
 
-export const validateYearForm = (formData) => {
+export const validateYearForm = (formData, existingYears = []) => {
   const errors = {};
-  if (!formData.yearCode?.trim()) errors.yearCode = "Year code is required.";
-  if (!formData.yearNumber?.trim()) errors.yearNumber = "Year number is required.";
+
+  if (!formData.yearNumber?.trim()) {
+    errors.yearNumber = "Year number is required.";
+  } else {
+    const yearCode = `Y${formData.yearNumber.trim()}`; // generate yearCode for check
+    if (existingYears.some((year) => year.yearCode === yearCode)) {
+      errors.yearNumber = "Year number already exists.";
+    }
+  }
+  if (!formData.startDate?.trim()) {
+    errors.startDate = "Start date is required.";
+  }
+  if (!formData.endDate?.trim()) {
+    errors.endDate = "End date is required.";
+  }
+  if (formData.startDate && formData.endDate) {
+    if (new Date(formData.startDate) > new Date(formData.endDate)) {
+      errors.endDate = "End date must be after start date.";
+    }
+  }
   return errors;
 };
 
-export const validateSemesterForm = (formData) => {
+export const validateSemesterForm = (formData, existingSemesters = [], yearRecord = null) => {
   const errors = {};
-  if (!formData.semesterCode?.trim()) errors.semesterCode = "Semester code is required.";
   if (!formData.semesterNumber?.trim()) errors.semesterNumber = "Semester number is required.";
   if (!formData.yearCode?.trim()) errors.yearCode = "Year code is required.";
+  if (!formData.startDate) errors.startDate = "Semester start date is required.";
+  if (!formData.endDate) errors.endDate = "Semester end date is required.";
+  if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
+    errors.startDate = "Start date must be before end date.";
+    errors.endDate = "End date must be after start date.";
+  }
+  //  Check duplicate semester number under the same year
+  const duplicate = existingSemesters.find(
+    (sem) => sem.semesterNumber === formData.semesterNumber && sem.yearCode === formData.yearCode
+  );
+  if (duplicate) {
+    errors.semesterNumber = `Semester ${formData.semesterNumber} already exists for the selected year.`;
+  }
+  //  Validate inside selected year range
+  if (yearRecord) {
+    if (formData.startDate < yearRecord.startDate || formData.endDate > yearRecord.endDate) {
+      errors.startDate = `Semester must be inside year period (${yearRecord.startDate} to ${yearRecord.endDate}).`;
+      errors.endDate = `Semester must be inside year period (${yearRecord.startDate} to ${yearRecord.endDate}).`;
+    }
+  }
   return errors;
 };
 
-export const validateLecturerForm = (formData) => {
+export const validateLecturerForm = (formData, existingLecturers = []) => {
   const errors = {};
-  if (!formData.id?.trim()) errors.id = "Lecturer ID is required.";
-  if (!formData.name?.trim()) errors.name = "Lecturer name is required.";
+  if (!formData.name?.trim()) {
+    errors.name = "Lecturer name is required.";
+  } else {
+    const nameExists = existingLecturers.some(
+      (lec) => lec.name.trim().toLowerCase() === formData.name.trim().toLowerCase()
+    );
+    if (nameExists) {
+      errors.name = "Lecturer name already exists.";
+    }
+  }
   return errors;
 };
+
 
 export const validateCourseForm = (formData) => {
   const errors = {};

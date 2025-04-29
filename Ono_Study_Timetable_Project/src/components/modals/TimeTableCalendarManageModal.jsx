@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Box, MenuItem, Select, Stack, Typography } from "@mui/material";
 import PopupModal from "../UI/PopupModal";
-import CustomButton from "../UI/CustomButton";
 
 // Import dynamic forms
 import YearForm from "./forms/YearForm";
@@ -104,7 +103,6 @@ const TimeTableCalendarManageModal = ({ open, onClose, onSave }) => {
       open={open}
       onClose={onClose}
       title="Add New Record"
-      actions={<CustomButton onClick={handleSubmit}>Save</CustomButton>}
     >
       <Stack spacing={2}>
         <Box>
