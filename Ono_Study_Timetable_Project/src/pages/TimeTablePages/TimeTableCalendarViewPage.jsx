@@ -5,8 +5,7 @@ import { Button, Stack, Typography } from "@mui/material";
 import FullCalendarView from "../../components/calendar/FullCalendarView";
 import StudentPersonalEventFormModal from "../../components/modals/forms/StudentPersonalEventFormModal";
 import {
-  handleEntityFormSubmit,
-  handleUpdateEntityFormSubmit,
+  handleSaveOrUpdateRecord,
   handleDeleteEntityFormSubmit
 } from "../../handlers/formHandlers";
 import { getRecords } from "../../utils/storage";
@@ -67,40 +66,24 @@ export default function TimeTableCalendarViewPage() {
     }
   };
 
-  const handleSave = async (formData) => {
-    const user = JSON.parse(localStorage.getItem("loggedInUser"));
-    if (!user) {
-      alert("No logged in user.");
+  const handleSave= async () => {
+    const actionType = formData?.id ? "edit" : "add";
+  
+    const { success, errors } = await handleSaveOrUpdateRecord(
+      "students",
+      localForm,
+      actionType
+    );
+  
+    if (!success) {
+      setLocalErrors(errors || {});
       return;
     }
-
-    const isEdit = selectedEvent && selectedEvent.id;
-
-    const payload = {
-      ...formData,
-      ownerId: user.id,
-      id: formData.id || Date.now().toString(),
-      start: new Date(`${formData.date}T${formData.startTime}`),
-      end: new Date(`${formData.date}T${formData.endTime}`),
-    };
-
-    const successCallback = (msg) => {
-      alert(msg);
-      setIsModalOpen(false);
-      setSelectedEvent(null);
-      loadEvents();
-    };
-
-    const errorCallback = (msg, errors) => {
-      alert(msg);
-    };
-
-    if (isEdit) {
-      await handleUpdateEntityFormSubmit("studentEvents", payload, successCallback, errorCallback);
-    } else {
-      await handleEntityFormSubmit("studentEvents", payload, successCallback, errorCallback);
-    }
+    
+    if (onSave) onSave(localForm);
+    onClose?.();
   };
+  
 
   const handleDelete = (formData) => {
     if (!formData?.id) return;

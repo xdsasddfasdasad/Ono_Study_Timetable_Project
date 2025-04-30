@@ -1,16 +1,11 @@
-import React, { useState } from "react";
-import {
-  TextField,
-  Stack,
-  Button,
-  Alert,
-} from "@mui/material";
-import PopupModal from "../../UI/PopupModal";
-import { hashPassword } from "../../../utils/hash";
+import React, { useState, useEffect } from "react";
+import { TextField, Box, Stack } from "@mui/material";
+import CustomButton from "../../UI/CustomButton";
+import FormWrapper from "../../UI/FormWrapper";
 import { validateStudentForm } from "../../../utils/validateForm";
-import { saveRecord } from "../../../utils/storage";
+import { updateRecord } from "../../../utils/storage";
 
-const EditStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) => {
+export default function EditStudentFormModal({ studentData, onClose, onSave, existingStudents }) {
   const [formData, setFormData] = useState({
     id: "",
     firstName: "",
@@ -18,92 +13,100 @@ const EditStudentFormModal = ({ open, onClose, onSave, existingStudents = [] }) 
     email: "",
     username: "",
     password: "",
-    confirmPassword: "",
-    phone: "",
   });
 
   const [errors, setErrors] = useState({});
-  const [generalError, setGeneralError] = useState("");
+
+  useEffect(() => {
+    if (studentData) {
+      setFormData({
+        ...studentData,
+        password: "", // user must input a new password if they want to change it
+      });
+    }
+  }, [studentData]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     const validationErrors = validateStudentForm(formData, existingStudents, { skipPassword: !formData.password });
-    setErrors(validationErrors);
-
     if (Object.keys(validationErrors).length > 0) {
-      setGeneralError("Please fix the errors before submitting.");
+      setErrors(validationErrors);
       return;
     }
 
-    try {
-      const hashedPassword = formData.password ? await hashPassword(formData.password) : undefined;
-      const studentToSave = {
-        ...formData,
-        ...(hashedPassword && { password: hashedPassword }),
-      };
-      delete studentToSave.confirmPassword;
-
-      if (onSave) onSave(studentToSave);
-      saveRecord("students", studentToSave);
-
-      setFormData({
-        id: "",
-        firstName: "",
-        lastName: "",
-        email: "",
-        username: "",
-        password: "",
-        confirmPassword: "",
-        phone: "",
-      });
-      setErrors({});
-      setGeneralError("");
-      onClose();
-    } catch (error) {
-      setGeneralError("An error occurred while processing the form.");
+    const updatedStudent = { ...formData };
+    if (!formData.password) {
+      delete updatedStudent.password; // do not overwrite existing password if not changing
     }
+
+    updateRecord("students", updatedStudent);
+    onSave();
+    onClose();
   };
 
   return (
-    <PopupModal
-      open={open}
-      onClose={onClose}
-      title="Edit Student"
-      actions={<Button variant="contained" onClick={handleSubmit}>Save</Button>}
-    >
-      <Stack spacing={2} mt={1}>
-        {generalError && <Alert severity="error">{generalError}</Alert>}
+    <FormWrapper title="Edit Student">
+      <Stack spacing={2}>
+        <TextField
+          label="ID"
+          name="id"
+          value={formData.id}
+          disabled
+        />
+        <TextField
+          label="First Name"
+          name="firstName"
+          value={formData.firstName}
+          onChange={handleChange}
+          error={!!errors.firstName}
+          helperText={errors.firstName}
+        />
+        <TextField
+          label="Last Name"
+          name="lastName"
+          value={formData.lastName}
+          onChange={handleChange}
+          error={!!errors.lastName}
+          helperText={errors.lastName}
+        />
+        <TextField
+          label="Email"
+          name="email"
+          value={formData.email}
+          onChange={handleChange}
+          error={!!errors.email}
+          helperText={errors.email}
+        />
+        <TextField
+          label="Username"
+          name="username"
+          value={formData.username}
+          onChange={handleChange}
+          error={!!errors.username}
+          helperText={errors.username}
+        />
+        <TextField
+          label="New Password (optional)"
+          name="password"
+          type="password"
+          value={formData.password}
+          onChange={handleChange}
+          error={!!errors.password}
+          helperText={errors.password}
+        />
 
-        <TextField label="Student ID" name="id" value={formData.id}
-          InputProps={{ readOnly: true }} fullWidth />
-
-        <TextField label="First Name" name="firstName" value={formData.firstName}
-          onChange={handleChange} error={!!errors.firstName} helperText={errors.firstName} fullWidth />
-
-        <TextField label="Last Name" name="lastName" value={formData.lastName}
-          onChange={handleChange} error={!!errors.lastName} helperText={errors.lastName} fullWidth />
-
-        <TextField label="Email" name="email" value={formData.email}
-          onChange={handleChange} error={!!errors.email} helperText={errors.email} fullWidth />
-
-        <TextField label="Phone" name="phone" value={formData.phone}
-          onChange={handleChange} fullWidth />
-
-        <TextField label="Username" name="username" value={formData.username}
-          onChange={handleChange} error={!!errors.username} helperText={errors.username} fullWidth />
-
-        <TextField label="Password" name="password" type="password" value={formData.password}
-          onChange={handleChange} error={!!errors.password} helperText={errors.password} fullWidth />
-
-        <TextField label="Confirm Password" name="confirmPassword" type="password" value={formData.confirmPassword}
-          onChange={handleChange} error={!!errors.confirmPassword} helperText={errors.confirmPassword} fullWidth />
+        <Box display="flex" justifyContent="flex-end" gap={2}>
+          <CustomButton onClick={onClose}>Cancel</CustomButton>
+          <CustomButton onClick={handleSubmit}>Save Changes</CustomButton>
+        </Box>
       </Stack>
-    </PopupModal>
+    </FormWrapper>
   );
-};
-
-export default EditStudentFormModal;
+}

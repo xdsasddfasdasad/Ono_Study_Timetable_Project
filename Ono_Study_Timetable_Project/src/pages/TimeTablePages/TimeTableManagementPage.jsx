@@ -1,9 +1,11 @@
 // src/pages/TimeTableManagementPage.jsx
+
 import React, { useEffect, useState } from "react";
 import FullCalendarView from "../../components/calendar/FullCalendarView";
 import TimeTableCalendarManageModal from "../../components/modals/TimeTableCalendarManageModal";
-import { Button, Stack } from "@mui/material";
+import { Button, Stack, Select, MenuItem, TextField, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
 import { getRecords } from "../../utils/storage";
+import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers";
 
 export default function TimeTableManagementPage() {
   const [events, setEvents] = useState([]);
@@ -11,6 +13,12 @@ export default function TimeTableManagementPage() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [defaultDate, setDefaultDate] = useState(null);
   const [recordType, setRecordType] = useState("event");
+
+  const [isManageEntitiesModalOpen, setIsManageEntitiesModalOpen] = useState(false);
+  const [selectedEntityType, setSelectedEntityType] = useState("");
+  const [selectedEntityRecord, setSelectedEntityRecord] = useState(null);
+  const [entityRecords, setEntityRecords] = useState([]);
+  const [localForm, setLocalForm] = useState({});
 
   useEffect(() => {
     loadEvents();
@@ -28,8 +36,8 @@ export default function TimeTableManagementPage() {
   };
 
   const loadEvents = () => {
-    const baseEvents = getRecords("allEvents");
-    const years = getRecords("years");
+    const baseEvents = getRecords("allEvents") || [];
+    const years = getRecords("years") || [];
 
     const yearSemesterEvents = years.flatMap((y) => {
       const yearItems = [
@@ -102,8 +110,8 @@ export default function TimeTableManagementPage() {
 
   const handleEventClick = (info) => {
     const eventId = info.event.id;
-    const baseEvents = getRecords("allEvents");
-    const years = getRecords("years");
+    const baseEvents = getRecords("allEvents") || [];
+    const years = getRecords("years") || [];
 
     let found = baseEvents.find((e) => e.id === eventId);
 
@@ -150,6 +158,45 @@ export default function TimeTableManagementPage() {
     }, 100);
   };
 
+  const handleEntityTypeChange = (e) => {
+    const value = e.target.value;
+    setSelectedEntityType(value);
+    const records = getRecords(value) || [];
+    setEntityRecords(records);
+    setSelectedEntityRecord(null);
+    setLocalForm({});
+  };
+
+  const handleEntitySelect = (e) => {
+    const selectedId = e.target.value;
+    const record = entityRecords.find((rec) => rec.id === selectedId || rec.siteCode === selectedId || rec.roomCode === selectedId);
+    if (record) {
+      setSelectedEntityRecord(record);
+      setLocalForm(record);
+    }
+  };
+
+  const handleEntityFieldChange = (e) => {
+    const { name, value } = e.target;
+    setLocalForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveEntity = async () => {
+    if (!selectedEntityType || !localForm) return;
+
+    const { success, errors } = await handleSaveOrUpdateRecord(
+      selectedEntityType,
+      localForm,
+      "edit"
+    );
+
+    if (success) {
+      setIsManageEntitiesModalOpen(false);
+    } else {
+      console.error(errors);
+    }
+  };
+
   return (
     <div style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto", position: "relative" }}>
       <Stack direction="row" spacing={2} mb={2}>
@@ -165,6 +212,14 @@ export default function TimeTableManagementPage() {
         >
           ➕ Add New
         </Button>
+
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={() => setIsManageEntitiesModalOpen(true)}
+        >
+          ⚙️ Manage Entities
+        </Button>
       </Stack>
 
       <FullCalendarView
@@ -173,6 +228,7 @@ export default function TimeTableManagementPage() {
         onEventClick={handleEventClick}
       />
 
+      {/* Existing Modal for Events */}
       <TimeTableCalendarManageModal
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -181,6 +237,63 @@ export default function TimeTableManagementPage() {
         defaultDate={defaultDate}
         recordType={recordType}
       />
+
+      {/* New Modal for Manage Entities */}
+      <Dialog open={isManageEntitiesModalOpen} onClose={() => setIsManageEntitiesModalOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Manage Entities</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} mt={1}>
+            <Select
+              value={selectedEntityType}
+              onChange={handleEntityTypeChange}
+              fullWidth
+              displayEmpty
+            >
+              <MenuItem value="" disabled>Select Entity Type</MenuItem>
+              <MenuItem value="lecturers">Lecturers</MenuItem>
+              <MenuItem value="rooms">Rooms</MenuItem>
+              <MenuItem value="sites">Sites</MenuItem>
+            </Select>
+
+            {selectedEntityType && (
+              <Select
+                value={selectedEntityRecord?.id || selectedEntityRecord?.roomCode || selectedEntityRecord?.siteCode || ""}
+                onChange={handleEntitySelect}
+                fullWidth
+                displayEmpty
+              >
+                <MenuItem value="" disabled>Select Specific Record</MenuItem>
+                {entityRecords.map((rec) => (
+                  <MenuItem key={rec.id || rec.roomCode || rec.siteCode} value={rec.id || rec.roomCode || rec.siteCode}>
+                    {rec.name || rec.roomName || rec.siteName}
+                  </MenuItem>
+                ))}
+              </Select>
+            )}
+
+            {selectedEntityRecord && (
+              <>
+                {Object.keys(localForm).map((field) => (
+                  (field !== "id" && field !== "siteCode" && field !== "roomCode") && (
+                    <TextField
+                      key={field}
+                      name={field}
+                      label={field.charAt(0).toUpperCase() + field.slice(1)}
+                      value={localForm[field] || ""}
+                      onChange={handleEntityFieldChange}
+                      fullWidth
+                    />
+                  )
+                ))}
+              </>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsManageEntitiesModalOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="primary" onClick={handleSaveEntity}>Save</Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 }

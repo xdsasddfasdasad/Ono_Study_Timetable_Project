@@ -1,118 +1,147 @@
+// src/components/modals/forms/RoomForm.jsx
+
 import React, { useState, useEffect } from "react";
-import {
-  TextField,
-  Stack,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Typography,
-} from "@mui/material";
-import { validateRoomForm } from "../../../utils/validateForm";
-import { getRecords, saveRecords } from "../../../utils/storage";
-import CustomButton from "../../UI/CustomButton";
+import { TextField, Stack, FormControl, InputLabel, MenuItem, Select, Typography } from "@mui/material";
+import { getRecords } from "../../../utils/storage";
 
-export default function RoomForm({ formData, onClose, onSave, options }) {
-  const [localForm, setLocalForm] = useState({
-    roomCode: "",
-    roomName: "",
-    siteCode: "",
-  });
-
-  const [localErrors, setLocalErrors] = useState({});
+export default function RoomForm({ formData = {}, errors = {}, onChange, mode = "add", options = {} }) {
+  const [availableSites, setAvailableSites] = useState([]);
+  const [selectedSiteCode, setSelectedSiteCode] = useState("");
+  const [availableRooms, setAvailableRooms] = useState([]);
+  const [selectedRoomCode, setSelectedRoomCode] = useState("");
 
   useEffect(() => {
-    if (formData) setLocalForm(formData);
-  }, [formData]);
+    const sites = options.sites || getRecords("sites") || [];
+    setAvailableSites(sites);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setLocalForm((prev) => ({ ...prev, [name]: value }));
-    setLocalErrors((prevErrors) => ({ ...prevErrors, [name]: undefined }));
+    if (mode === "edit" && formData.siteCode) {
+      setSelectedSiteCode(formData.siteCode);
+    }
+  }, [options.sites, mode, formData.siteCode]);
+
+  useEffect(() => {
+    if (selectedSiteCode) {
+      const site = availableSites.find((s) => s.siteCode === selectedSiteCode);
+      if (site) {
+        setAvailableRooms(site.rooms || []);
+      } else {
+        setAvailableRooms([]);
+      }
+    }
+  }, [selectedSiteCode, availableSites]);
+
+  useEffect(() => {
+    if (mode === "edit" && formData.roomCode) {
+      setSelectedRoomCode(formData.roomCode);
+    }
+  }, [formData.roomCode, mode]);
+
+  const handleSiteChange = (e) => {
+    const value = e.target.value;
+    setSelectedSiteCode(value);
+    setSelectedRoomCode("");
+    onChange({ target: { name: "siteCode", value } });
   };
 
-  const handleSubmit = () => {
-    const validationErrors = validateRoomForm(localForm);
-    if (Object.keys(validationErrors).length > 0) {
-      setLocalErrors(validationErrors);
-      return;
+  const handleRoomChange = (e) => {
+    const value = e.target.value;
+    setSelectedRoomCode(value);
+
+    const room = availableRooms.find((r) => r.roomCode === value);
+    if (room) {
+      // Update form fields
+      onChange({ target: { name: "roomCode", value: room.roomCode } });
+      onChange({ target: { name: "roomName", value: room.roomName } });
+      onChange({ target: { name: "notes", value: room.notes || "" } });
     }
-
-    const sites = getRecords("sites") || [];
-    const siteIndex = sites.findIndex((s) => s.siteCode === localForm.siteCode);
-    if (siteIndex === -1) {
-      setLocalErrors({ siteCode: "Selected site not found" });
-      return;
-    }
-
-    const site = sites[siteIndex];
-    const existingRooms = site.rooms || [];
-    const isEdit = existingRooms.some((r) => r.roomCode === localForm.roomCode);
-
-    const updatedRooms = isEdit
-      ? existingRooms.map((r) =>
-          r.roomCode === localForm.roomCode ? localForm : r
-        )
-      : [...existingRooms, localForm];
-
-    sites[siteIndex] = {
-      ...site,
-      rooms: updatedRooms,
-    };
-
-    saveRecords("sites", sites);
-    if (onSave) onSave(localForm);
-    setLocalForm({ roomCode: "", roomName: "", siteCode: "" });
-    setLocalErrors({});
-    onClose?.();
   };
+
+  useEffect(() => {
+    if (mode === "add" && !formData.roomCode) {
+      const allRooms = availableSites.flatMap((site) => site.rooms || []);
+      const numbers = allRooms.map((r) => parseInt(r.roomCode?.replace("R", ""), 10)).filter((n) => !isNaN(n));
+      const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
+      const nextRoomCode = `R${nextNumber}`;
+
+      onChange({ target: { name: "roomCode", value: nextRoomCode } });
+    }
+  }, [availableSites, formData.roomCode, mode, onChange]);
 
   return (
     <Stack spacing={2}>
-      <TextField
-        label="Room Code"
-        name="roomCode"
-        value={localForm.roomCode}
-        onChange={handleChange}
-        error={!!localErrors.roomCode}
-        helperText={localErrors.roomCode}
-        fullWidth
-        disabled={!!formData?.roomCode} // disable in edit mode
-      />
-      <TextField
-        label="Room Name"
-        name="roomName"
-        value={localForm.roomName}
-        onChange={handleChange}
-        error={!!localErrors.roomName}
-        helperText={localErrors.roomName}
-        fullWidth
-      />
-
-      <FormControl fullWidth error={!!localErrors.siteCode}>
+      {/* Select Site */}
+      <FormControl fullWidth error={!!errors.siteCode}>
         <InputLabel>Site</InputLabel>
         <Select
-          name="siteCode"
-          value={localForm.siteCode}
-          onChange={handleChange}
+          value={selectedSiteCode}
+          onChange={handleSiteChange}
+          disabled={mode === "edit"}
           label="Site"
         >
-          {options?.sites?.map((site) => (
+          {availableSites.map((site) => (
             <MenuItem key={site.siteCode} value={site.siteCode}>
               {site.siteName}
             </MenuItem>
           ))}
         </Select>
-        {localErrors.siteCode && (
-          <Typography color="error" variant="caption">
-            {localErrors.siteCode}
-          </Typography>
+        {errors.siteCode && (
+          <Typography color="error" variant="caption">{errors.siteCode}</Typography>
         )}
       </FormControl>
 
-      <CustomButton onClick={handleSubmit}>
-        {formData?.roomCode ? "Update Room" : "Save Room"}
-      </CustomButton>
+      {/* Select Room if editing */}
+      {mode === "edit" && (
+        <FormControl fullWidth error={!!errors.roomCode}>
+          <InputLabel>Room</InputLabel>
+          <Select
+            value={selectedRoomCode}
+            onChange={handleRoomChange}
+            label="Room"
+          >
+            {availableRooms.map((room) => (
+              <MenuItem key={room.roomCode} value={room.roomCode}>
+                {room.roomName} ({room.roomCode})
+              </MenuItem>
+            ))}
+          </Select>
+          {errors.roomCode && (
+            <Typography color="error" variant="caption">{errors.roomCode}</Typography>
+          )}
+        </FormControl>
+      )}
+
+      {/* Room Code (Always Disabled) */}
+      <TextField
+        label="Room Code"
+        name="roomCode"
+        value={formData.roomCode || ""}
+        fullWidth
+        disabled
+      />
+
+      {/* Room Name */}
+      <TextField
+        label="Room Name"
+        name="roomName"
+        value={formData.roomName || ""}
+        onChange={onChange}
+        error={!!errors.roomName}
+        helperText={errors.roomName}
+        fullWidth
+      />
+
+      {/* Notes */}
+      <TextField
+        label="Notes"
+        name="notes"
+        value={formData.notes || ""}
+        onChange={onChange}
+        error={!!errors.notes}
+        helperText={errors.notes}
+        fullWidth
+        multiline
+        minRows={2}
+      />
     </Stack>
   );
 }

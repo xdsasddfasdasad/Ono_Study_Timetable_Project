@@ -47,7 +47,6 @@ export const validateYearForm = (formData, existingYears = []) => {
 export const validateSemesterForm = (formData, existingSemesters = [], yearRecord = null) => {
   const errors = {};
   if (!formData.semesterNumber?.trim()) errors.semesterNumber = "Semester number is required.";
-  if (!formData.yearCode?.trim()) errors.yearCode = "Year code is required.";
   if (!formData.startDate?.trim()) errors.startDate = "Semester start date is required.";
   if (!formData.endDate?.trim()) errors.endDate = "Semester end date is required.";
   
@@ -83,7 +82,6 @@ export const validateLecturerForm = (formData, existingLecturers = []) => {
 
 export const validateCourseForm = (formData) => {
   const errors = {};
-  if (!formData.courseCode?.trim()) errors.courseCode = "Course code is required.";
   if (!formData.courseName?.trim()) errors.courseName = "Course name is required.";
   if (!formData.lecturerId?.trim()) errors.lecturerId = "Lecturer is required.";
   if (!formData.semesterCode?.trim()) errors.semesterCode = "Semester is required.";
@@ -92,7 +90,6 @@ export const validateCourseForm = (formData) => {
 
 export const validateTaskForm = (formData) => {
   const errors = {};
-  if (!formData.assignmentCode?.trim()) errors.assignmentCode = "Assignment code is required.";
   if (!formData.assignmentName?.trim()) errors.assignmentName = "Assignment name is required.";
   if (!formData.courseCode?.trim()) errors.courseCode = "Course is required.";
   return errors;
@@ -100,14 +97,12 @@ export const validateTaskForm = (formData) => {
 
 export const validateSiteForm = (formData) => {
   const errors = {};
-  if (!formData.siteCode?.trim()) errors.siteCode = "Site code is required.";
   if (!formData.siteName?.trim()) errors.siteName = "Site name is required.";
   return errors;
 };
 
 export const validateRoomForm = (formData) => {
   const errors = {};
-  if (!formData.roomCode?.trim()) errors.roomCode = "Room code is required.";
   if (!formData.roomName?.trim()) errors.roomName = "Room name is required.";
   if (!formData.siteCode?.trim()) errors.siteCode = "Site is required.";
   return errors;
@@ -115,7 +110,6 @@ export const validateRoomForm = (formData) => {
 
 export const validateHolidayForm = (formData) => {
   const errors = {};
-  if (!formData.holidayCode?.trim()) errors.holidayCode = "Holiday code is required.";
   if (!formData.holidayName?.trim()) errors.holidayName = "Holiday name is required.";
   if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
   if (!formData.endDate?.trim()) errors.endDate = "End date is required.";
@@ -127,7 +121,6 @@ export const validateHolidayForm = (formData) => {
 
 export const validateVacationForm = (formData) => {
   const errors = {};
-  if (!formData.vacationCode?.trim()) errors.vacationCode = "Vacation code is required.";
   if (!formData.vacationName?.trim()) errors.vacationName = "Vacation name is required.";
   if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
   if (!formData.endDate?.trim()) errors.endDate = "End date is required.";
@@ -136,7 +129,6 @@ export const validateVacationForm = (formData) => {
 
 export const validateEventForm = (formData) => {
   const errors = {};
-  if (!formData.eventCode?.trim()) errors.eventCode = "Event code is required.";
   if (!formData.eventName?.trim()) errors.eventName = "Event name is required.";
   if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
   if (!formData.endDate?.trim()) errors.endDate = "End date is required.";

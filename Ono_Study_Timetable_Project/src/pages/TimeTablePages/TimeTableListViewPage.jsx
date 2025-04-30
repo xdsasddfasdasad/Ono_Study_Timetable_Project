@@ -10,8 +10,7 @@ import {
 } from "@mui/material";
 import StudentPersonalEventFormModal from "../../components/modals/forms/StudentPersonalEventFormModal";
 import {
-  handleEntityFormSubmit,
-  handleUpdateEntityFormSubmit,
+  handleSaveOrUpdateRecord,
   handleDeleteEntityFormSubmit
 } from "../../handlers/formHandlers";
 import { getRecords } from "../../utils/storage";
@@ -64,33 +63,22 @@ export default function TimeTableListViewPage() {
     );
   };
 
-  const handleSave = async (formData) => {
-    const isEdit = selectedEvent && selectedEvent.id;
-    const payload = {
-      ...formData,
-      id: formData.id || Date.now().toString(),
-      start: new Date(`${formData.date}T${formData.startTime}`),
-      end: new Date(`${formData.date}T${formData.endTime}`),
-      eventType: "personal",
-    };
-
-    const successCallback = (msg) => {
-      alert(msg);
-      setIsModalOpen(false);
-      setSelectedEvent(null);
-      loadEvents();
-    };
-
-    const errorCallback = (msg, errors) => {
-      alert(msg);
-      // You can optionally manage form errors here if needed
-    };
-
-    if (isEdit) {
-      await handleUpdateEntityFormSubmit("studentEvents", payload, successCallback, errorCallback);
-    } else {
-      await handleEntityFormSubmit("studentEvents", payload, successCallback, errorCallback);
+  const handleSave = async () => {
+    const actionType = formData?.id ? "edit" : "add";
+  
+    const { success, errors } = await handleSaveOrUpdateRecord(
+      "students",
+      localForm,
+      actionType
+    );
+  
+    if (!success) {
+      setLocalErrors(errors || {});
+      return;
     }
+    
+    if (onSave) onSave(localForm);
+    onClose?.();
   };
 
   return (

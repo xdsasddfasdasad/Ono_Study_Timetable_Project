@@ -1,3 +1,4 @@
+// /src/layouts/AppLayout.jsx
 import { Outlet } from "react-router-dom";
 import HeaderNavigationBar from "../components/Header/HeaderNavigationBar";
 import { Box, Container } from "@mui/material";

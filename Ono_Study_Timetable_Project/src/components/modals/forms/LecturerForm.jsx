@@ -1,7 +1,9 @@
+// src/components/forms/LecturerForm.jsx
+
 import React, { useState, useEffect } from "react";
 import { TextField, Stack } from "@mui/material";
-import { validateLecturerForm } from "../../../utils/validateForm";
-import { saveRecord, getRecords } from "../../../utils/storage";
+import { getRecords } from "../../../utils/storage";
+import { handleSaveOrUpdateRecord } from "../../../handlers/formHandlers";
 import CustomButton from "../../UI/CustomButton";
 
 export default function LecturerForm({ formData, onClose, onSave }) {
@@ -13,17 +15,17 @@ export default function LecturerForm({ formData, onClose, onSave }) {
   const [localErrors, setLocalErrors] = useState({});
 
   useEffect(() => {
-    if (formData) {
-      setLocalForm(formData);
+    if (formData && formData.id) {
+      setLocalForm(formData); // Editing existing
     } else {
-      generateNextLecturerId();
+      generateNextLecturerId(); // Creating new
     }
   }, [formData]);
 
   const generateNextLecturerId = () => {
     const existingLecturers = getRecords("lecturers") || [];
     const numbers = existingLecturers
-      .map((lec) => parseInt(lec.id.replace("L", ""), 10))
+      .map((lec) => parseInt(lec.id?.replace("L", ""), 10))
       .filter((n) => !isNaN(n));
     const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
     const nextId = `L${nextNumber}`;
@@ -32,6 +34,7 @@ export default function LecturerForm({ formData, onClose, onSave }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name === "id") return; // ID is never editable
     setLocalForm((prev) => ({
       ...prev,
       [name]: value,
@@ -39,29 +42,47 @@ export default function LecturerForm({ formData, onClose, onSave }) {
     setLocalErrors((prevErrors) => ({ ...prevErrors, [name]: undefined }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const existingLecturers = getRecords("lecturers") || [];
-  
-    const validationErrors = validateLecturerForm(localForm, existingLecturers);
-  
-    if (Object.keys(validationErrors).length > 0) {
-      setLocalErrors(validationErrors);
+    const actionType = formData?.id ? "edit" : "add";
+
+    // If ID is missing during add — generate it
+    if (!localForm.id && actionType === "add") {
+      const numbers = existingLecturers
+        .map((lec) => parseInt(lec.id?.replace("L", ""), 10))
+        .filter((n) => !isNaN(n));
+      const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
+      const nextId = `L${nextNumber}`;
+      localForm.id = nextId;
+    }
+
+    const { success, errors } = await handleSaveOrUpdateRecord(
+      "lecturers",
+      localForm,
+      actionType
+    );
+
+    if (!success) {
+      setLocalErrors(errors || {});
       return;
     }
-  
-    // Passed validation
-    saveRecord("lecturers", localForm);
+
     if (onSave) onSave(localForm);
-  
-    setLocalForm({ id: "", name: "" });
-    setLocalErrors({});
     onClose?.();
   };
-  
 
   return (
     <Stack spacing={3}>
-      {/* Lecturer Name only (no ID shown anymore) */}
+      {formData && formData.id && (
+        <TextField
+          label="Lecturer ID"
+          name="id"
+          value={localForm.id}
+          fullWidth
+          disabled
+        />
+      )}
+
       <TextField
         label="Lecturer Name"
         name="name"

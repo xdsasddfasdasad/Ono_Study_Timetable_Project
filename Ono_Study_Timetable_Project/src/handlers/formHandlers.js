@@ -1,15 +1,8 @@
-import { saveRecord, updateRecord, deleteRecord } from "../utils/storage";
-import { hashPassword } from "../utils/hash"; // only used for Students
-import { validateStudentForm, validateCourseForm, validateYearForm, validateTaskForm, validateEventForm } from "../utils/validateForm"; // adjust imports as needed
+// src/handlers/formHandlers.js
 
-const validationMap = {
-  students: validateStudentForm,
-  courses: validateCourseForm,
-  years: validateYearForm,
-  tasks: validateTaskForm,
-  events: validateEventForm,
-  // Add more mappings if needed
-};
+import { saveRecord, updateRecord, deleteRecord, getRecords } from "../utils/storage";
+import { hashPassword } from "../utils/hash"; // Only for students
+import { validateFormByType } from "../utils/validateForm";
 
 const matchKeyMap = {
   students: "id",
@@ -24,45 +17,25 @@ const matchKeyMap = {
   tasks: "assignmentCode",
 };
 
-export const handleEntityFormSubmit = async (entityKey, formData, onSuccess, onError) => {
+export const handleSaveOrUpdateRecord = async (entityKey, formData, actionType) => {
   try {
-    const validate = validationMap[entityKey];
-    if (validate) {
-      const errors = validate(formData);
-      if (Object.keys(errors).length > 0) {
-        onError("Validation failed", errors);
-        return;
+    const matchKey = matchKeyMap[entityKey];
+    if (!matchKey) {
+      return { success: false, message: `Unknown entityKey: ${entityKey}` };
+    }
+
+    const existingRecords = getRecords(entityKey) || [];
+
+    const validationErrors = validateFormByType(
+      entityKey.replace(/s$/, ""),
+      formData,
+      {
+        [`existing${entityKey.charAt(0).toUpperCase() + entityKey.slice(1)}`]: existingRecords,
       }
-    }
+    );
 
-    let preparedData = { ...formData };
-
-    if (entityKey === "students") {
-      preparedData.password = await hashPassword(formData.password);
-    }
-
-    const success = saveRecord(entityKey, preparedData);
-
-    if (success) {
-      onSuccess(`${entityKey} record saved successfully!`);
-    } else {
-      onError(`Failed to save ${entityKey} record.`);
-    }
-  } catch (error) {
-    console.error(`Error in handleEntityFormSubmit for ${entityKey}:`, error);
-    onError("Unexpected error occurred.");
-  }
-};
-
-export const handleUpdateEntityFormSubmit = async (entityKey, formData, onSuccess, onError) => {
-  try {
-    const validate = validationMap[entityKey];
-    if (validate) {
-      const errors = validate(formData, [], { skipPassword: true });
-      if (Object.keys(errors).length > 0) {
-        onError("Validation failed", errors);
-        return;
-      }
+    if (Object.keys(validationErrors).length > 0) {
+      return { success: false, errors: validationErrors };
     }
 
     let preparedData = { ...formData };
@@ -71,17 +44,50 @@ export const handleUpdateEntityFormSubmit = async (entityKey, formData, onSucces
       preparedData.password = await hashPassword(formData.password);
     }
 
-    const matchKey = matchKeyMap[entityKey];
-    const success = updateRecord(entityKey, matchKey, preparedData);
+    let operationSuccess = false;
 
-    if (success) {
-      onSuccess(`${entityKey} record updated successfully!`);
+    if (actionType === "add") {
+      operationSuccess = saveRecord(entityKey, preparedData);
+    } else if (actionType === "edit") {
+      operationSuccess = updateRecord(entityKey, matchKey, preparedData);
     } else {
-      onError(`Failed to update ${entityKey} record.`);
+      return { success: false, message: "Invalid action type" };
     }
+
+    // Handle room-site relationship update
+    if (operationSuccess && entityKey === "rooms") {
+      const sites = getRecords("sites") || [];
+      const siteIndex = sites.findIndex((s) => s.siteCode === formData.siteCode);
+
+      if (siteIndex !== -1) {
+        const site = sites[siteIndex];
+        const existingRooms = site.rooms || [];
+
+        const cleanedRoom = {
+          roomCode: formData.roomCode,
+          roomName: formData.roomName,
+          notes: formData.notes || "",
+        };
+
+        const roomIndex = existingRooms.findIndex((r) => r.roomCode === formData.roomCode);
+
+        if (roomIndex !== -1) {
+          // Edit: update room in site
+          existingRooms[roomIndex] = cleanedRoom;
+        } else {
+          // Add: push room to site
+          existingRooms.push(cleanedRoom);
+        }
+
+        sites[siteIndex].rooms = existingRooms;
+        localStorage.setItem("sites", JSON.stringify(sites));
+      }
+    }
+
+    return { success: operationSuccess };
   } catch (error) {
-    console.error(`Error in handleUpdateEntityFormSubmit for ${entityKey}:`, error);
-    onError("Unexpected error occurred.");
+    console.error(`Error in handleSaveOrUpdateRecord for ${entityKey}:`, error);
+    return { success: false, message: "Unexpected error occurred." };
   }
 };
 

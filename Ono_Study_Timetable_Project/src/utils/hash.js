@@ -1,3 +1,5 @@
+// src/utils/hash.js
+
 export async function hashPassword(password) {
   const encoder = new TextEncoder();
   const data = encoder.encode(password);
