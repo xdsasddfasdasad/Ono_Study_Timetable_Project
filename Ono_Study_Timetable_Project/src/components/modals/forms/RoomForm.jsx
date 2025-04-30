@@ -6,8 +6,8 @@ import { getRecords } from "../../../utils/storage";
 
 export default function RoomForm({ formData = {}, errors = {}, onChange, mode = "add", options = {} }) {
   const [availableSites, setAvailableSites] = useState([]);
-  const [selectedSiteCode, setSelectedSiteCode] = useState("");
   const [availableRooms, setAvailableRooms] = useState([]);
+  const [selectedSiteCode, setSelectedSiteCode] = useState("");
   const [selectedRoomCode, setSelectedRoomCode] = useState("");
 
   useEffect(() => {
@@ -20,14 +20,8 @@ export default function RoomForm({ formData = {}, errors = {}, onChange, mode = 
   }, [options.sites, mode, formData.siteCode]);
 
   useEffect(() => {
-    if (selectedSiteCode) {
-      const site = availableSites.find((s) => s.siteCode === selectedSiteCode);
-      if (site) {
-        setAvailableRooms(site.rooms || []);
-      } else {
-        setAvailableRooms([]);
-      }
-    }
+    const site = availableSites.find((s) => s.siteCode === selectedSiteCode);
+    setAvailableRooms(site?.rooms || []);
   }, [selectedSiteCode, availableSites]);
 
   useEffect(() => {
@@ -36,6 +30,15 @@ export default function RoomForm({ formData = {}, errors = {}, onChange, mode = 
     }
   }, [formData.roomCode, mode]);
 
+  useEffect(() => {
+    if (mode === "add" && !formData.roomCode) {
+      const allRooms = availableSites.flatMap((site) => site.rooms || []);
+      const nextNum = Math.max(0, ...allRooms.map(r => parseInt(r.roomCode?.replace("R", "") || "0", 10))) + 1;
+      const nextRoomCode = `R${nextNum}`;
+      onChange({ target: { name: "roomCode", value: nextRoomCode } });
+    }
+  }, [availableSites, formData.roomCode, mode, onChange]);
+
   const handleSiteChange = (e) => {
     const value = e.target.value;
     setSelectedSiteCode(value);
@@ -43,33 +46,25 @@ export default function RoomForm({ formData = {}, errors = {}, onChange, mode = 
     onChange({ target: { name: "siteCode", value } });
   };
 
-  const handleRoomChange = (e) => {
+  const handleRoomSelect = (e) => {
     const value = e.target.value;
     setSelectedRoomCode(value);
-
-    const room = availableRooms.find((r) => r.roomCode === value);
-    if (room) {
-      // Update form fields
-      onChange({ target: { name: "roomCode", value: room.roomCode } });
-      onChange({ target: { name: "roomName", value: room.roomName } });
-      onChange({ target: { name: "notes", value: room.notes || "" } });
+    const selectedRoom = availableRooms.find((r) => r.roomCode === value);
+    if (selectedRoom) {
+      onChange({ target: { name: "roomCode", value: selectedRoom.roomCode } });
+      onChange({ target: { name: "roomName", value: selectedRoom.roomName || "" } });
+      onChange({ target: { name: "notes", value: selectedRoom.notes || "" } });
     }
   };
 
-  useEffect(() => {
-    if (mode === "add" && !formData.roomCode) {
-      const allRooms = availableSites.flatMap((site) => site.rooms || []);
-      const numbers = allRooms.map((r) => parseInt(r.roomCode?.replace("R", ""), 10)).filter((n) => !isNaN(n));
-      const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
-      const nextRoomCode = `R${nextNumber}`;
-
-      onChange({ target: { name: "roomCode", value: nextRoomCode } });
-    }
-  }, [availableSites, formData.roomCode, mode, onChange]);
-
   return (
     <Stack spacing={2}>
-      {/* Select Site */}
+      {errors.general && (
+        <Typography color="error" variant="body2">
+          {errors.general}
+        </Typography>
+      )}
+      {/* Site Selection */}
       <FormControl fullWidth error={!!errors.siteCode}>
         <InputLabel>Site</InputLabel>
         <Select
@@ -84,18 +79,16 @@ export default function RoomForm({ formData = {}, errors = {}, onChange, mode = 
             </MenuItem>
           ))}
         </Select>
-        {errors.siteCode && (
-          <Typography color="error" variant="caption">{errors.siteCode}</Typography>
-        )}
+        {errors.siteCode && <Typography color="error" variant="caption">{errors.siteCode}</Typography>}
       </FormControl>
 
-      {/* Select Room if editing */}
+      {/* Room Selection (Edit only) */}
       {mode === "edit" && (
         <FormControl fullWidth error={!!errors.roomCode}>
           <InputLabel>Room</InputLabel>
           <Select
             value={selectedRoomCode}
-            onChange={handleRoomChange}
+            onChange={handleRoomSelect}
             label="Room"
           >
             {availableRooms.map((room) => (
@@ -104,9 +97,7 @@ export default function RoomForm({ formData = {}, errors = {}, onChange, mode = 
               </MenuItem>
             ))}
           </Select>
-          {errors.roomCode && (
-            <Typography color="error" variant="caption">{errors.roomCode}</Typography>
-          )}
+          {errors.roomCode && <Typography color="error" variant="caption">{errors.roomCode}</Typography>}
         </FormControl>
       )}
 
