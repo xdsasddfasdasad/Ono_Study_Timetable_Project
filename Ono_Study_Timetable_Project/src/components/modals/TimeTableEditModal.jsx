@@ -1,14 +1,11 @@
 // src/components/modals/TimeTableEditModal.jsx
 
 import React, { useEffect, useState } from "react";
-import { Stack } from "@mui/material";
-import PopupModal from "../UI/PopupModal";
 import FormWrapper from "../UI/FormWrapper";
 import CustomButton from "../UI/CustomButton";
+import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers";
 
-import { handleSaveOrUpdateRecord, handleDeleteEntityFormSubmit } from "../../handlers/formHandlers";
-
-// Form Imports
+// All form components
 import YearForm from "./forms/YearForm";
 import SemesterForm from "./forms/SemesterForm";
 import LecturerForm from "./forms/LecturerForm";
@@ -21,6 +18,7 @@ import HolidayForm from "./forms/HolidayForm";
 import VacationForm from "./forms/VacationForm";
 import EventForm from "./forms/EventForm";
 import StudentPersonalEventFormModal from "./forms/StudentPersonalEventFormModal";
+import PopupModal from "../UI/PopupModal";
 
 const formMap = {
   year: YearForm,
@@ -37,15 +35,23 @@ const formMap = {
   studentEvent: StudentPersonalEventFormModal,
 };
 
-export default function TimeTableEditModal({ open, onClose, onSave, recordType, selectedEvent }) {
+export default function TimeTableEditModal({
+  open,
+  onClose,
+  onSave,
+  selectedEvent,
+  recordType,
+}) {
   const [formData, setFormData] = useState({});
   const [errors, setErrors] = useState({});
+
   const FormComponent = formMap[recordType];
 
   useEffect(() => {
-    setFormData(selectedEvent || {});
-    setErrors({});
-  }, [selectedEvent, open]);
+    if (selectedEvent) {
+      setFormData(selectedEvent);
+    }
+  }, [selectedEvent]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -53,9 +59,13 @@ export default function TimeTableEditModal({ open, onClose, onSave, recordType, 
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
-  const handleSave = async () => {
+  const handleUpdate = async () => {
+    if (!recordType || !formData) return;
+
+    const entityKey = getEntityKeyByRecordType(recordType);
+
     const { success, errors } = await handleSaveOrUpdateRecord(
-      getEntityKeyByRecordType(recordType),
+      entityKey,
       formData,
       "edit"
     );
@@ -69,20 +79,6 @@ export default function TimeTableEditModal({ open, onClose, onSave, recordType, 
     onClose?.();
   };
 
-  const handleDelete = () => {
-    const matchKeyValue =
-      formData.id || formData.roomCode || formData.siteCode || formData.courseCode;
-
-    handleDeleteEntityFormSubmit(
-      getEntityKeyByRecordType(recordType),
-      matchKeyValue,
-      onSave,
-      () => setErrors({ general: "Failed to delete record." })
-    );
-
-    onClose?.();
-  };
-
   return (
     <PopupModal open={open} onClose={onClose} title="Edit Record">
       <FormWrapper>
@@ -91,22 +87,18 @@ export default function TimeTableEditModal({ open, onClose, onSave, recordType, 
             formData={formData}
             errors={errors}
             onChange={handleChange}
-            onClose={onClose}
             mode="edit"
           />
         )}
 
-        <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ mt: 3 }}>
-          <CustomButton onClick={handleSave}>Save</CustomButton>
-          <CustomButton onClick={handleDelete} color="error">Delete</CustomButton>
-          <CustomButton onClick={onClose} variant="outlined">Cancel</CustomButton>
-        </Stack>
+        <CustomButton onClick={handleUpdate}>Update</CustomButton>
+        <CustomButton variant="outlined" onClick={onClose}>
+          Cancel
+        </CustomButton>
       </FormWrapper>
     </PopupModal>
   );
 }
-
-// -- Helpers --
 
 function getEntityKeyByRecordType(type) {
   switch (type) {

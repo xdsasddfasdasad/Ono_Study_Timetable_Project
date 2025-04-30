@@ -73,16 +73,6 @@ export default function LecturerForm({ formData, onClose, onSave }) {
 
   return (
     <Stack spacing={3}>
-      {formData && formData.id && (
-        <TextField
-          label="Lecturer ID"
-          name="id"
-          value={localForm.id}
-          fullWidth
-          disabled
-        />
-      )}
-
       <TextField
         label="Lecturer Name"
         name="name"

@@ -22,15 +22,6 @@ export default function HolidayForm({ formData, onChange, errors, onClose, onSav
   return (
     <Stack spacing={2}>
       <TextField
-        label="Holiday Code"
-        name="holidayCode"
-        value={formData.holidayCode || ""}
-        onChange={onChange}
-        error={!!errors.holidayCode}
-        helperText={errors.holidayCode}
-        fullWidth
-      />
-      <TextField
         label="Holiday Name"
         name="holidayName"
         value={formData.holidayName || ""}

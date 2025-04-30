@@ -4,6 +4,7 @@ import HeaderNavigationBar from "../components/Header/HeaderNavigationBar";
 import { Box, Container } from "@mui/material";
 
 const AppLayout = () => {
+  console.log("AppLayout rendering..."); // בדוק אם ה-Layout מרונדר
   return (
     <>
       <HeaderNavigationBar />

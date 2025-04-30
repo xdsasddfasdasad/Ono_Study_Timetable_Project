@@ -100,16 +100,6 @@ export default function RoomForm({ formData = {}, errors = {}, onChange, mode = 
           {errors.roomCode && <Typography color="error" variant="caption">{errors.roomCode}</Typography>}
         </FormControl>
       )}
-
-      {/* Room Code (Always Disabled) */}
-      <TextField
-        label="Room Code"
-        name="roomCode"
-        value={formData.roomCode || ""}
-        fullWidth
-        disabled
-      />
-
       {/* Room Name */}
       <TextField
         label="Room Name"

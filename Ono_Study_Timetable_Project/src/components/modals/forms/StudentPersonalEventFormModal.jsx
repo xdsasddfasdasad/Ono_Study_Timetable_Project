@@ -1,13 +1,21 @@
+// /components/modals/forms/StudentPersonalEventFormModal.jsx
+
 import React, { useEffect, useState } from "react";
-import { TextField, Stack, Button, Typography } from "@mui/material";
+import { TextField, Stack, Button } from "@mui/material";
 import PopupModal from "../../UI/PopupModal";
 import CustomButton from "../../UI/CustomButton";
 import { validatePersonalEventForm } from "../../../utils/validateForm";
 import { getRecords, saveRecord } from "../../../utils/storage";
 
-const EVENT_STORAGE_KEY = "studentPersonalEvents";
+const EVENT_STORAGE_KEY = "studentEvents";
 
-const StudentPersonalEventFormModal = ({ open, onClose, onSave, defaultDate, selectedEvent }) => {
+const StudentPersonalEventFormModal = ({
+  open,
+  onClose,
+  onSave,
+  defaultDate,
+  selectedEvent,
+}) => {
   const [formData, setFormData] = useState({
     id: "",
     title: "",
@@ -16,27 +24,32 @@ const StudentPersonalEventFormModal = ({ open, onClose, onSave, defaultDate, sel
     endTime: "",
     description: "",
   });
+
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (selectedEvent) {
+      const start = new Date(selectedEvent.start);
+      const end = new Date(selectedEvent.end);
+
       setFormData({
-        ...selectedEvent,
-        date: selectedEvent.start?.toISOString().split("T")[0] || "",
-        startTime: selectedEvent.start?.toISOString().substring(11, 16) || "",
-        endTime: selectedEvent.end?.toISOString().substring(11, 16) || "",
+        id: selectedEvent.id || "",
+        title: selectedEvent.title || "",
+        date: start.toISOString().split("T")[0],
+        startTime: start.toISOString().substring(11, 16),
+        endTime: end.toISOString().substring(11, 16),
+        description: selectedEvent.description || "",
       });
     } else if (defaultDate) {
-      setFormData((prev) => ({
-        ...prev,
-        date: defaultDate.toISOString().split("T")[0],
-      }));
+      const dateStr = new Date(defaultDate).toISOString().split("T")[0];
+      setFormData((prev) => ({ ...prev, date: dateStr }));
     }
   }, [defaultDate, selectedEvent]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
   const handleSubmit = () => {
@@ -49,18 +62,28 @@ const StudentPersonalEventFormModal = ({ open, onClose, onSave, defaultDate, sel
 
     const updatedEvent = {
       ...formData,
+      title: formData.title.trim(),
       start,
       end,
+      type: "studentEvent", // mark explicitly for rendering logic
+      allDay: false,
     };
 
-    const existing = getRecords(EVENT_STORAGE_KEY);
+    const existing = getRecords(EVENT_STORAGE_KEY) || [];
 
     if (formData.id) {
-      const updated = existing.map((ev) => (ev.id === formData.id ? updatedEvent : ev));
+      // Edit mode
+      const updated = existing.map((ev) =>
+        ev.id === formData.id ? updatedEvent : ev
+      );
       localStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify(updated));
     } else {
-      updatedEvent.id = Date.now().toString();
-      localStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify([...existing, updatedEvent]));
+      // Add mode
+      updatedEvent.id = `SE${Date.now()}`;
+      localStorage.setItem(
+        EVENT_STORAGE_KEY,
+        JSON.stringify([...existing, updatedEvent])
+      );
     }
 
     onSave?.();
@@ -69,7 +92,7 @@ const StudentPersonalEventFormModal = ({ open, onClose, onSave, defaultDate, sel
 
   const handleDelete = () => {
     if (!formData.id) return;
-    const existing = getRecords(EVENT_STORAGE_KEY);
+    const existing = getRecords(EVENT_STORAGE_KEY) || [];
     const updated = existing.filter((ev) => ev.id !== formData.id);
     localStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify(updated));
     onSave?.();
@@ -80,7 +103,7 @@ const StudentPersonalEventFormModal = ({ open, onClose, onSave, defaultDate, sel
     <PopupModal
       open={open}
       onClose={onClose}
-      title={formData.id ? "Edit Event" : "Add Personal Event"}
+      title={formData.id ? "Edit Personal Event" : "Add Personal Event"}
       actions={
         <Stack direction="row" spacing={2}>
           {formData.id && (
@@ -89,7 +112,9 @@ const StudentPersonalEventFormModal = ({ open, onClose, onSave, defaultDate, sel
             </Button>
           )}
           <Button onClick={onClose}>Cancel</Button>
-          <CustomButton onClick={handleSubmit}>{formData.id ? "Update" : "Save"}</CustomButton>
+          <CustomButton onClick={handleSubmit}>
+            {formData.id ? "Update" : "Save"}
+          </CustomButton>
         </Stack>
       }
     >

@@ -1,4 +1,4 @@
-// --- Individual Field Validations ---
+// /utils/validateForm.js
 
 export const validateStudentForm = (formData, existingStudents = [], options = {}) => {
   const errors = {};
@@ -30,17 +30,38 @@ export const validateStudentForm = (formData, existingStudents = [], options = {
 
 export const validateYearForm = (formData, existingYears = []) => {
   const errors = {};
-  if (!formData.yearNumber?.trim()) errors.yearNumber = "Year number is required.";
-  else {
-    const yearCode = `Y${formData.yearNumber.trim()}`;
-    const duplicate = existingYears.some((y) => y.yearCode === yearCode && y !== formData);
-    if (duplicate) errors.yearNumber = "Year number already exists.";
+
+  const trimmedYearNumber = formData.yearNumber?.trim();
+
+  if (!trimmedYearNumber) {
+    errors.yearNumber = "Year number is required.";
+  } else {
+    const duplicate = existingYears.some(
+      (y) =>
+        y.yearNumber?.trim() === trimmedYearNumber &&
+        y.yearCode !== formData.yearCode // ignore self when editing
+    );
+    if (duplicate) {
+      errors.yearNumber = "Year number already exists.";
+    }
   }
-  if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
-  if (!formData.endDate?.trim()) errors.endDate = "End date is required.";
-  if (formData.startDate && formData.endDate && new Date(formData.startDate) > new Date(formData.endDate)) {
+
+  if (!formData.startDate?.trim()) {
+    errors.startDate = "Start date is required.";
+  }
+
+  if (!formData.endDate?.trim()) {
+    errors.endDate = "End date is required.";
+  }
+
+  if (
+    formData.startDate &&
+    formData.endDate &&
+    new Date(formData.startDate) > new Date(formData.endDate)
+  ) {
     errors.endDate = "End date must be after start date.";
   }
+
   return errors;
 };
 

@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { Stack, MenuItem, Select, InputLabel, FormControl } from "@mui/material";
-import PopupModal from "../UI/PopupModal";
 import FormWrapper from "../UI/FormWrapper";
 import CustomButton from "../UI/CustomButton";
 import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers";
+import PopupModal from "../UI/PopupModal";
 
 // Form Imports
 import YearForm from "./forms/YearForm";
@@ -21,6 +21,7 @@ import VacationForm from "./forms/VacationForm";
 import EventForm from "./forms/EventForm";
 import StudentPersonalEventFormModal from "./forms/StudentPersonalEventFormModal";
 
+// Mapping form components
 const formMap = {
   year: YearForm,
   semester: SemesterForm,
@@ -51,7 +52,7 @@ const labelMap = {
   studentEvent: "Student Personal Event",
 };
 
-export default function TimeTableAddModal({ open, onClose, onSave }) {
+export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }) {
   const [recordType, setRecordType] = useState("");
   const [formData, setFormData] = useState({});
   const [errors, setErrors] = useState({});
@@ -60,18 +61,18 @@ export default function TimeTableAddModal({ open, onClose, onSave }) {
 
   useEffect(() => {
     if (!open) {
+      setRecordType("");
       setFormData({});
       setErrors({});
-      setRecordType("");
     }
   }, [open]);
 
   useEffect(() => {
     if (recordType) {
-      const generatedId = generateEntityId(recordType);
+      const generatedId = generateEntityId(recordType, defaultDate);
       setFormData((prev) => ({ ...prev, ...generatedId }));
     }
-  }, [recordType]);
+  }, [recordType, defaultDate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -82,8 +83,9 @@ export default function TimeTableAddModal({ open, onClose, onSave }) {
   const handleSave = async () => {
     if (!recordType) return;
 
+    const entityKey = getEntityKeyByRecordType(recordType);
     const { success, errors } = await handleSaveOrUpdateRecord(
-      getEntityKeyByRecordType(recordType),
+      entityKey,
       formData,
       "add"
     );
@@ -127,17 +129,21 @@ export default function TimeTableAddModal({ open, onClose, onSave }) {
 
         <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ mt: 3 }}>
           <CustomButton onClick={handleSave}>Save</CustomButton>
-          <CustomButton onClick={onClose} variant="outlined">Cancel</CustomButton>
+          <CustomButton variant="outlined" onClick={onClose}>
+            Cancel
+          </CustomButton>
         </Stack>
       </FormWrapper>
     </PopupModal>
   );
 }
 
-// --- Helpers ---
+// Helpers
 
-function generateEntityId(type) {
+function generateEntityId(type, defaultDate) {
   const timestamp = Date.now();
+  const dateStr = defaultDate ? new Date(defaultDate).toISOString().slice(0, 10) : "";
+
   switch (type) {
     case "year":
       return { yearCode: `Y${timestamp}` };
@@ -156,13 +162,21 @@ function generateEntityId(type) {
     case "room":
       return { roomCode: `R${timestamp}` };
     case "holiday":
-      return { holidayCode: `H${timestamp}` };
+      return { holidayCode: `H${timestamp}`, date: dateStr };
     case "vacation":
-      return { vacationCode: `V${timestamp}` };
+      return { vacationCode: `V${timestamp}`, startDate: dateStr, endDate: dateStr };
     case "event":
-      return { eventCode: `E${timestamp}` };
+      return {
+        eventCode: `E${timestamp}`,
+        startDate: dateStr,
+        endDate: dateStr,
+      };
     case "studentEvent":
-      return { id: `SE${timestamp}` };
+      return {
+        id: `SE${timestamp}`,
+        start: dateStr,
+        end: dateStr,
+      };
     default:
       return { id: `ID${timestamp}` };
   }

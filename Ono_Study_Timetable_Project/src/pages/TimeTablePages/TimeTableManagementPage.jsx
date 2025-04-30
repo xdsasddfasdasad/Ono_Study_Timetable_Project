@@ -1,4 +1,4 @@
-// src/pages/TimeTableManagementPage.jsx
+// /pages/TimeTablePages/TimeTableManagementPage.jsx
 
 import React, { useEffect, useState } from "react";
 import FullCalendarView from "../../components/calendar/FullCalendarView";
@@ -16,6 +16,8 @@ export default function TimeTableManagementPage() {
 
   useEffect(() => {
     loadEvents();
+    window.addEventListener("storage", loadEvents);
+    return () => window.removeEventListener("storage", loadEvents);
   }, []);
 
   const getColorByType = (type) => {
@@ -30,11 +32,18 @@ export default function TimeTableManagementPage() {
   };
 
   const loadEvents = () => {
-    const baseEvents = getRecords("allEvents") || [];
+    const baseEvents = (getRecords("allEvents") || []).filter(
+      (e) =>
+        !e.id?.startsWith("year-start-") &&
+        !e.id?.startsWith("year-end-") &&
+        !e.id?.startsWith("semester-start-") &&
+        !e.id?.startsWith("semester-end-")
+    );
+
     const years = getRecords("years") || [];
 
-    const yearSemesterEvents = years.flatMap((y) => {
-      const yearItems = [
+    const generatedEvents = years.flatMap((y) => {
+      const yearEvents = [
         {
           id: `year-start-${y.yearCode}`,
           title: `Year ${y.yearNumber} Start`,
@@ -44,6 +53,7 @@ export default function TimeTableManagementPage() {
           allDay: true,
           backgroundColor: getColorByType("year"),
           borderColor: getColorByType("year"),
+          generated: true,
         },
         {
           id: `year-end-${y.yearCode}`,
@@ -54,10 +64,11 @@ export default function TimeTableManagementPage() {
           allDay: true,
           backgroundColor: getColorByType("year"),
           borderColor: getColorByType("year"),
+          generated: true,
         },
       ];
 
-      const semesterItems = (y.semesters || []).flatMap((s) => [
+      const semesterEvents = (y.semesters || []).flatMap((s) => [
         {
           id: `semester-start-${s.semesterCode}`,
           title: `Semester ${s.semesterNumber} Start`,
@@ -67,6 +78,7 @@ export default function TimeTableManagementPage() {
           allDay: true,
           backgroundColor: getColorByType("semester"),
           borderColor: getColorByType("semester"),
+          generated: true,
         },
         {
           id: `semester-end-${s.semesterCode}`,
@@ -77,22 +89,23 @@ export default function TimeTableManagementPage() {
           allDay: true,
           backgroundColor: getColorByType("semester"),
           borderColor: getColorByType("semester"),
+          generated: true,
         },
       ]);
 
-      return [...yearItems, ...semesterItems];
+      return [...yearEvents, ...semesterEvents];
     });
 
-    const preparedBaseEvents = baseEvents.map((e) => ({
+    const preparedEvents = baseEvents.map((e) => ({
       ...e,
       start: new Date(e.start),
       end: new Date(e.end),
+      allDay: e.allDay === true || e.allDay === "True",
       backgroundColor: getColorByType(e.type || "event"),
       borderColor: getColorByType(e.type || "event"),
-      allDay: e.allDay === true || e.allDay === "True",
     }));
 
-    setEvents([...preparedBaseEvents, ...yearSemesterEvents]);
+    setEvents([...preparedEvents, ...generatedEvents]);
   };
 
   const handleDateClick = (info) => {
@@ -104,43 +117,40 @@ export default function TimeTableManagementPage() {
 
   const handleEventClick = (info) => {
     const eventId = info.event.id;
-    const baseEvents = getRecords("allEvents") || [];
     const years = getRecords("years") || [];
 
-    let found = baseEvents.find((e) => e.id === eventId);
-
-    if (!found) {
-      if (eventId.startsWith("year-start-") || eventId.startsWith("year-end-")) {
-        const yearCode = eventId.replace("year-start-", "").replace("year-end-", "");
-        found = years.find((y) => y.yearCode === yearCode);
-        if (found) {
-          setRecordType("year");
-          setSelectedEvent(found);
-          setIsModalOpen(true);
-          return;
-        }
+    if (eventId.startsWith("year-start-") || eventId.startsWith("year-end-")) {
+      const yearCode = eventId.replace("year-start-", "").replace("year-end-", "");
+      const year = years.find((y) => y.yearCode === yearCode);
+      if (year) {
+        setRecordType("year");
+        setSelectedEvent(year);
+        setIsModalOpen(true);
       }
-      if (eventId.startsWith("semester-start-") || eventId.startsWith("semester-end-")) {
-        const semesterCode = eventId.replace("semester-start-", "").replace("semester-end-", "");
-        const yearContainingSemester = years.find((y) => (y.semesters || []).some((s) => s.semesterCode === semesterCode));
-        if (yearContainingSemester) {
-          const semester = yearContainingSemester.semesters.find((s) => s.semesterCode === semesterCode);
-          if (semester) {
-            setRecordType("semester");
-            setSelectedEvent({
-              ...semester,
-              yearCode: yearContainingSemester.yearCode
-            });
-            setIsModalOpen(true);
-            return;
-          }
-        }
-      }
+      return;
     }
 
+    if (eventId.startsWith("semester-start-") || eventId.startsWith("semester-end-")) {
+      const semesterCode = eventId.replace("semester-start-", "").replace("semester-end-", "");
+      const yearWithSemester = years.find((y) =>
+        (y.semesters || []).some((s) => s.semesterCode === semesterCode)
+      );
+      if (yearWithSemester) {
+        const semester = yearWithSemester.semesters.find((s) => s.semesterCode === semesterCode);
+        if (semester) {
+          setRecordType("semester");
+          setSelectedEvent({ ...semester, yearCode: yearWithSemester.yearCode });
+          setIsModalOpen(true);
+        }
+      }
+      return;
+    }
+
+    const baseEvents = getRecords("allEvents") || [];
+    const found = baseEvents.find((e) => e.id === eventId);
     if (found) {
-      setSelectedEvent(found);
       setRecordType(found.type || "event");
+      setSelectedEvent(found);
       setIsModalOpen(true);
     }
   };
@@ -153,7 +163,7 @@ export default function TimeTableManagementPage() {
   };
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto", position: "relative" }}>
+    <div style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto" }}>
       <Stack direction="row" spacing={2} mb={2}>
         <Button
           variant="contained"

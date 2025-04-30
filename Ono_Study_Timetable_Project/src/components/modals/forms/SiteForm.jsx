@@ -11,18 +11,6 @@ export default function SiteForm({ formData = {}, onChange, errors = {}, mode = 
           {errors.general}
         </Typography>
         )}
-      {/* Site Code - Always disabled */}
-      <TextField
-        label="Site Code"
-        name="siteCode"
-        value={formData.siteCode || ""}
-        onChange={onChange}
-        error={!!errors.siteCode}
-        helperText={errors.siteCode}
-        fullWidth
-        disabled
-      />
-
       {/* Site Name */}
       <TextField
         label="Site Name"

@@ -39,6 +39,7 @@ export default function TimeTableCalendarManageModal({
       setEntityRecords(records);
       setSelectedEntityRecord(null);
       setLocalForm({});
+      setEntityErrors({});
     }
   }, [selectedEntityType]);
 
@@ -49,7 +50,10 @@ export default function TimeTableCalendarManageModal({
   const handleEntitySelect = (e) => {
     const selectedId = e.target.value;
     const record = entityRecords.find(
-      (rec) => rec.id === selectedId || rec.roomCode === selectedId || rec.siteCode === selectedId
+      (rec) =>
+        rec.id === selectedId ||
+        rec.roomCode === selectedId ||
+        rec.siteCode === selectedId
     );
     if (record) {
       setSelectedEntityRecord(record);
@@ -90,7 +94,12 @@ export default function TimeTableCalendarManageModal({
           recordType={recordType}
         />
       ) : (
-        <TimeTableAddModal open={open} onClose={onClose} onSave={onSave} />
+        <TimeTableAddModal
+          open={open}
+          onClose={onClose}
+          onSave={onSave}
+          defaultDate={defaultDate}
+        />
       )}
 
       <Dialog
@@ -114,6 +123,7 @@ export default function TimeTableCalendarManageModal({
               <MenuItem value="lecturers">Lecturers</MenuItem>
               <MenuItem value="rooms">Rooms</MenuItem>
               <MenuItem value="sites">Sites</MenuItem>
+              {/* You can add more types here as needed */}
             </Select>
 
             {selectedEntityType && (

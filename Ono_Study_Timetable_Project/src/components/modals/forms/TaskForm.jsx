@@ -30,15 +30,6 @@ export default function TaskForm({ formData, onChange, errors, onClose, onSave, 
   return (
     <Stack spacing={2}>
       <TextField
-        label="Assignment Code"
-        name="assignmentCode"
-        value={formData.assignmentCode}
-        onChange={onChange}
-        error={!!errors.assignmentCode}
-        helperText={errors.assignmentCode}
-        fullWidth
-      />
-      <TextField
         label="Assignment Name"
         name="assignmentName"
         value={formData.assignmentName}

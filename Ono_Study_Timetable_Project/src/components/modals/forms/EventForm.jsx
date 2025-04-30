@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from "react";
-import { TextField, Stack, FormControlLabel, Checkbox, Box, Typography } from "@mui/material";
-import { validateEventForm } from "../../../utils/validateForm";
-import { saveRecord } from "../../../utils/storage";
-import CustomButton from "../../UI/CustomButton";
+import React, { useEffect, useState } from "react";
+import {TextField, Stack, FormControlLabel, Checkbox,} from "@mui/material";
+import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers";
 
-export default function EventForm({ formData, onChange, errors, onClose, onSave }) {
-  const [localForm, setLocalForm] = useState({
-    eventCode: "",
+export default function EventForm({
+  formData = {},
+  onChange,
+  errors = {},
+  mode = "add",
+}) {
+  const [local, setLocal] = useState({
     eventName: "",
     startDate: "",
     endDate: "",
@@ -15,123 +17,98 @@ export default function EventForm({ formData, onChange, errors, onClose, onSave 
     endHour: "23:59",
   });
 
-  const [localErrors, setLocalErrors] = useState({});
-
   useEffect(() => {
-    if (formData) {
-      setLocalForm((prev) => ({
-        ...prev,
-        ...formData,
-        allDay: formData.allDay === true || formData.allDay === "True" || formData.allDay === "true", // Normalize
-        startHour: formData.startHour || "00:00",
-        endHour: formData.endHour || "23:59",
-      }));
-    }
+    setLocal({
+      eventName: formData.eventName || "",
+      startDate: formData.startDate || "",
+      endDate: formData.endDate || "",
+      allDay:
+        formData.allDay === true ||
+        formData.allDay === "true" ||
+        formData.allDay === "True",
+      startHour: formData.startHour || "00:00",
+      endHour: formData.endHour || "23:59",
+    });
   }, [formData]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     const newValue = type === "checkbox" ? checked : value;
-
-    setLocalForm((prev) => ({ ...prev, [name]: newValue }));
-    if (onChange) onChange(e);
-  };
-
-  const handleSubmit = () => {
-    const validationErrors = validateEventForm(localForm);
-    setLocalErrors(validationErrors);
-
-    if (Object.keys(validationErrors).length > 0) {
-      if (onChange) onChange({ target: { name: "errors", value: validationErrors } });
-      return;
-    }
-
-    saveRecord("events", localForm);
-
-    if (onSave) onSave(localForm);
-
-    onClose?.();
+    setLocal((prev) => ({ ...prev, [name]: newValue }));
+    onChange?.({ target: { name, value: newValue } });
   };
 
   return (
     <Stack spacing={2}>
       <TextField
-        label="Event Code"
-        name="eventCode"
-        value={localForm.eventCode}
-        onChange={handleChange}
-        error={!!localErrors.eventCode}
-        helperText={localErrors.eventCode}
-        fullWidth
-      />
-      <TextField
         label="Event Name"
         name="eventName"
-        value={localForm.eventName}
+        value={local.eventName}
         onChange={handleChange}
-        error={!!localErrors.eventName}
-        helperText={localErrors.eventName}
+        error={!!errors.eventName}
+        helperText={errors.eventName}
         fullWidth
       />
 
-      <Box>
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={localForm.allDay}
-              onChange={handleChange}
-              name="allDay"
-            />
-          }
-          label="All Day Event"
-        />
-      </Box>
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={local.allDay}
+            onChange={handleChange}
+            name="allDay"
+          />
+        }
+        label="All Day Event"
+      />
 
       <TextField
         label="Start Date"
         name="startDate"
         type="date"
-        value={localForm.startDate}
+        value={local.startDate}
         onChange={handleChange}
-        error={!!localErrors.startDate}
-        helperText={localErrors.startDate}
-        InputLabelProps={{ shrink: true }}
-        fullWidth
-      />
-      <TextField
-        label="End Date"
-        name="endDate"
-        type="date"
-        value={localForm.endDate}
-        onChange={handleChange}
-        error={!!localErrors.endDate}
-        helperText={localErrors.endDate}
+        error={!!errors.startDate}
+        helperText={errors.startDate}
         InputLabelProps={{ shrink: true }}
         fullWidth
       />
 
-      {!localForm.allDay && (
+      <TextField
+        label="End Date"
+        name="endDate"
+        type="date"
+        value={local.endDate}
+        onChange={handleChange}
+        error={!!errors.endDate}
+        helperText={errors.endDate}
+        InputLabelProps={{ shrink: true }}
+        fullWidth
+      />
+
+      {!local.allDay && (
         <>
           <TextField
             label="Start Hour"
             name="startHour"
             type="time"
-            value={localForm.startHour}
+            value={local.startHour}
             onChange={handleChange}
+            error={!!errors.startHour}
+            helperText={errors.startHour}
             fullWidth
           />
           <TextField
             label="End Hour"
             name="endHour"
             type="time"
-            value={localForm.endHour}
+            value={local.endHour}
             onChange={handleChange}
+            error={!!errors.endHour}
+            helperText={errors.endHour}
             fullWidth
           />
         </>
       )}
-
-      <CustomButton onClick={handleSubmit}>Save Event</CustomButton>
     </Stack>
   );
 }

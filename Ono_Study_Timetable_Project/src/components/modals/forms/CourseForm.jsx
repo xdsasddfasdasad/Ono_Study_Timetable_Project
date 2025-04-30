@@ -32,15 +32,6 @@ export default function CourseForm({ formData, onChange, errors, onClose, onSave
   return (
     <Stack spacing={2}>
       <TextField
-        label="Course Code"
-        name="courseCode"
-        value={formData.courseCode}
-        onChange={onChange}
-        error={!!errors.courseCode}
-        helperText={errors.courseCode}
-        fullWidth
-      />
-      <TextField
         label="Course Name"
         name="courseName"
         value={formData.courseName}

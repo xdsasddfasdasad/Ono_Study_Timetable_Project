@@ -1,153 +1,116 @@
 // src/utils/seedEventsData.js
 import { dummyData, dayMap } from "../data/dummyData";
+import { getRecords, saveRecords } from "./storage";
 
-// ✅ Helper: Check overlap with holiday/vacation
+// Helper: Check if a date falls within any holiday/vacation range
 const isDateInRange = (date, ranges) => {
-  return ranges.some(({ startDate, endDate }) => {
-    const d = new Date(date).toISOString().slice(0, 10);
-    return d >= startDate && d <= endDate;
-  });
+  if (!ranges || ranges.length === 0) return false;
+  const dateStr = date instanceof Date ? date.toISOString().slice(0, 10) : String(date).slice(0, 10);
+  return ranges.some(({ startDate, endDate }) => startDate && endDate && dateStr >= startDate && dateStr <= endDate);
 };
 
-// ✅ Helper: Generate course meetings
+// Helper: Generate course meetings based on definitions and semester dates
 const generateCourseMeetings = (courses, semesters, holidays, vacations) => {
+  console.log("[Generate Meetings] Function START");
   const meetings = [];
+  if (!courses || courses.length === 0 || !semesters || semesters.length === 0) {
+    console.warn("[Generate Meetings] ABORTING: Missing or empty courses/semesters data.");
+    return meetings;
+  }
 
-  courses.forEach((course) => {
+  const holidayVacationRanges = [...(holidays || []), ...(vacations || [])];
+  console.log(`[Generate Meetings] Using ${courses.length} courses, ${semesters.length} semesters, ${holidayVacationRanges.length} holiday/vacation ranges.`);
+
+  courses.forEach((course, courseIndex) => {
+    console.log(`[Generate Meetings] Processing Course #${courseIndex}: ${course.courseCode}`);
     const semester = semesters.find((s) => s.semesterCode === course.semesterCode);
-    if (!semester || !Array.isArray(course.hours)) return;
 
-    const start = new Date(semester.startDate);
-    const end = new Date(semester.endDate);
+    if (!semester) { /* ... log and continue ... */ console.warn(`[Generate Meetings] Course ${course.courseCode}: Semester ${semester.semesterCode} not found.`); return; }
+    if (!semester.startDate || !semester.endDate) { /* ... log and continue ... */ console.warn(`[Generate Meetings] Course ${course.courseCode}: Semester ${semester.semesterCode} has invalid dates.`); return; }
+    if (!Array.isArray(course.hours) || course.hours.length === 0) { /* ... log and continue ... */ console.warn(`[Generate Meetings] Course ${course.courseCode}: Missing or empty 'hours' array.`); return; }
 
-    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      const jsDay = date.getDay();
-      const weekDay = Object.keys(dayMap).find((k) => dayMap[k] === jsDay);
+    try {
+      const start = new Date(semester.startDate + 'T00:00:00Z');
+      const end = new Date(semester.endDate + 'T00:00:00Z');
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) { /* ... log and continue ... */ console.warn(`[Generate Meetings] Course ${course.courseCode}: Could not parse semester dates.`); return; }
+      console.log(`[Generate Meetings] Course ${course.courseCode}: Iterating from ${start.toISOString()} to ${end.toISOString()}`);
 
-      const matchingSlot = course.hours.find((h) => h.day === weekDay);
-      if (!matchingSlot) continue;
+      let meetingCountForCourse = 0;
+      for (let date = new Date(start); date <= end; date.setUTCDate(date.getUTCDate() + 1)) {
+        const dateStr = date.toISOString().slice(0, 10);
+        const jsDay = date.getUTCDay();
+        const weekDay = Object.keys(dayMap).find((k) => dayMap[k] === jsDay);
+        if (!weekDay) continue;
 
-      const dateStr = date.toISOString().slice(0, 10);
-      if (isDateInRange(dateStr, [...holidays, ...vacations])) continue;
+        const matchingSlot = course.hours.find((h) => h.day === weekDay);
+        if (!matchingSlot || !matchingSlot.start || !matchingSlot.end) continue;
+        if (isDateInRange(dateStr, holidayVacationRanges)) continue;
 
-      meetings.push({
-        id: `${course.courseCode}-${dateStr}`,
-        courseCode: course.courseCode,
-        courseName: course.courseName,
-        date: dateStr,
-        startHour: matchingSlot.start,
-        endHour: matchingSlot.end,
-        roomCode: course.roomCode,
-        lecturerId: course.lecturerId,
-        semesterCode: course.semesterCode,
-        notes: course.notes || "",
-        zoomMeetinglink: course.zoomMeetinglink || "",
-      });
+        // console.log(`[Generate Meetings] Course ${course.courseCode}: CREATING MEETING for ${dateStr} at ${matchingSlot.start}`);
+        meetings.push({
+          id: `${course.courseCode}-${dateStr}-${matchingSlot.start}`,
+          courseCode: course.courseCode, courseName: course.courseName, type: "courseMeeting",
+          date: dateStr, startHour: matchingSlot.start, endHour: matchingSlot.end,
+          roomCode: course.roomCode || null, lecturerId: course.lecturerId || null, semesterCode: course.semesterCode,
+          notes: course.notes || "", zoomMeetinglink: course.zoomMeetinglink || "", allDay: false
+        });
+        meetingCountForCourse++;
+      }
+      console.log(`[Generate Meetings] Course ${course.courseCode}: Added ${meetingCountForCourse} meetings.`);
+    } catch (error) {
+      console.error(`[Generate Meetings] Error during date iteration for course ${course.courseCode}:`, error);
     }
-  });
+  }); // End forEach course
 
+  console.log(`[Generate Meetings] Function END. Returning ${meetings.length} total raw meetings.`);
   return meetings;
 };
 
+// --- Main Seeding Function - ONLY generates and saves course meetings ---
 export const seedEventsData = async (force = false) => {
-  const studentEvents = dummyData.studentEvents || [];
+  console.log(`[SEED COURSE MEETINGS] STARTING. Force mode: ${force}`);
 
-  const events = (dummyData.events || []).map((e) => ({
-    id: e.eventCode,
-    title: e.eventName,
-    type: "event",
-    start: `${e.startDate}T${String(e.allDay).toLowerCase() === "true" ? "00:00" : e.startHour}`,
-    end: `${e.endDate}T${String(e.allDay).toLowerCase() === "true" ? "23:59" : e.endHour}`,
-    allDay: String(e.allDay).toLowerCase() === "true",
-  }));
+  try {
+    // --- 1. Load Base Data Needed for Generation ---
+    console.log("[SEED COURSE MEETINGS] Loading base data...");
+    const holidays = getRecords("holidays");
+    const vacations = getRecords("vacations");
+    const years = getRecords("years");
+    const courses = getRecords("courses");
+    const semesters = (years || []).flatMap((y) => y.semesters || []);
+    console.log("[SEED COURSE MEETINGS] Base data loaded.");
 
-  const holidays = (dummyData.holidays || []).map((h) => ({
-    id: h.holidayCode,
-    title: h.holidayName,
-    type: "holiday",
-    start: `${h.startDate}T00:00`,
-    end: `${h.endDate}T23:59`,
-    allDay: true,
-  }));
+    // --- 2. Generate Course Meetings ---
+    console.log("[SEED COURSE MEETINGS] Generating raw course meetings...");
+    const generatedMeetings = generateCourseMeetings(courses, semesters, holidays, vacations);
 
-  const vacations = (dummyData.vacations || []).map((v) => ({
-    id: v.vacationCode,
-    title: v.vacationName,
-    type: "vacation",
-    start: `${v.startDate}T00:00`,
-    end: `${v.endDate}T23:59`,
-    allDay: true,
-  }));
+    // --- 3. Save Raw Course Meetings ---
+    console.log("[SEED COURSE MEETINGS] Checking if 'coursesMeetings' needs saving...");
+    if (force || !localStorage.getItem("coursesMeetings")) {
+      console.log("[SEED COURSE MEETINGS] Saving generated meetings to 'coursesMeetings'...");
+      saveRecords("coursesMeetings", generatedMeetings); // שמור את מה שנוצר
+      console.log(`[SEED COURSE MEETINGS] Saved ${generatedMeetings.length} meetings to 'coursesMeetings'.`);
+    } else {
+      console.log("[SEED COURSE MEETINGS] 'coursesMeetings' data already exists, skipping save.");
+    }
 
-  const yearSemesterEvents = (dummyData.years || []).flatMap((year) => {
-    const entries = [
-      {
-        id: `${year.yearCode}-start`,
-        title: `Year ${year.yearNumber} Start`,
-        type: "year",
-        start: `${year.startDate}T00:00`,
-        end: `${year.startDate}T23:59`,
-        allDay: true,
-      },
-      {
-        id: `${year.yearCode}-end`,
-        title: `Year ${year.yearNumber} End`,
-        type: "year",
-        start: `${year.endDate}T00:00`,
-        end: `${year.endDate}T23:59`,
-        allDay: true,
-      },
-    ];
-    (year.semesters || []).forEach((s) => {
-      entries.push({
-        id: `${s.semesterCode}-start`,
-        title: `Semester ${s.semesterNumber} Start`,
-        type: "semester",
-        start: `${s.startDate}T00:00`,
-        end: `${s.startDate}T23:59`,
-        allDay: true,
-      });
-      entries.push({
-        id: `${s.semesterCode}-end`,
-        title: `Semester ${s.semesterNumber} End`,
-        type: "semester",
-        start: `${s.endDate}T00:00`,
-        end: `${s.endDate}T23:59`,
-        allDay: true,
-      });
-    });
-    return entries;
-  });
+    // --- REMOVED ALL LOGIC RELATED TO publicCalendarEvents ---
 
-  // ✅ Generate course meetings
-  const semesters = dummyData.years.flatMap((y) => y.semesters);
-  const courseMeetings = generateCourseMeetings(dummyData.courses, semesters, dummyData.holidays, dummyData.vacations);
+     // --- Optional Cleanup ---
+     // If you are sure you don't need the old keys from previous attempts:
+     if (localStorage.getItem("allEvents")) {
+        localStorage.removeItem("allEvents");
+        console.log("[SEED COURSE MEETINGS] Removed old 'allEvents' key.");
+     }
+      if (localStorage.getItem("publicCalendarEvents")) {
+         localStorage.removeItem("publicCalendarEvents");
+         console.log("[SEED COURSE MEETINGS] Removed old 'publicCalendarEvents' key.");
+      }
 
-  // ✅ Save coursesMeetings to localStorage
-  if (force || !localStorage.getItem("coursesMeetings")) {
-    localStorage.setItem("coursesMeetings", JSON.stringify(courseMeetings));
+
+  } catch (error) {
+    console.error("[SEED COURSE MEETINGS] OVERALL ERROR:", error);
+  } finally {
+    console.log("[SEED COURSE MEETINGS] FINISHED.");
   }
-
-  // ✅ Map course meetings into calendar format
-  const courseMeetingEvents = (courseMeetings || []).map((meeting) => ({
-    id: meeting.id,
-    title: meeting.courseName,
-    type: "courseMeeting",
-    courseCode: meeting.courseCode,
-    start: `${meeting.date}T${meeting.startHour}`,
-    end: `${meeting.date}T${meeting.endHour}`,
-    allDay: false,
-  }));
-
-  // ✅ Build allEvents
-  const allEvents = [
-    ...studentEvents,
-    ...events,
-    ...holidays,
-    ...vacations,
-    ...yearSemesterEvents,
-    ...courseMeetingEvents,
-  ];
-
-  localStorage.setItem("allEvents", JSON.stringify(allEvents));
-};
+}; // End of seedEventsData function
