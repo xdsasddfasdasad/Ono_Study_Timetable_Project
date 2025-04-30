@@ -22,7 +22,6 @@ export const dummyData = {
   years: [
     {
       yearCode: "Y1",
-      label: "Year 1",
       yearNumber: "1",
       startDate: "2025-04-01",
       endDate: "2025-04-30",
@@ -43,7 +42,6 @@ export const dummyData = {
     },
     {
       yearCode: "Y2",
-      label: "Year 2",
       yearNumber: "2",
       startDate: "2026-09-01",
       endDate: "2027-06-30",
