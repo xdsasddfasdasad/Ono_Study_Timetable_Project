@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {TextField, Stack, FormControlLabel, Checkbox,} from "@mui/material";
-import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers";
+import { handleSaveOrUpdateRecord } from "../../../handlers/formHandlers";
 
 export default function EventForm({
   formData = {},
