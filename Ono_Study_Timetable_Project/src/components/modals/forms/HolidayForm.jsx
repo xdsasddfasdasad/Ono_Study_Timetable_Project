@@ -8,53 +8,40 @@ import {
   Typography,
   FormControlLabel,
   Checkbox,
-  Grid // Use Grid for better layout of date/time fields
+  Grid
 } from "@mui/material";
-
-// Simple presentation component for general Event data
 export default function EventForm({
-  formData = {},   // Current event data (passed from parent modal)
-  errors = {},     // Validation errors (passed from parent modal)
-  onChange,      // Callback function to notify parent of changes
-  mode = "add",    // 'add' or 'edit'
-  // selectOptions prop is accepted for consistency
+  formData = {},
+  errors = {},
+  onChange,
+  mode = "add",
   selectOptions = {}
 }) {
 
-  // Helper function to get error message for a field
+d
   const getError = (fieldName) => errors[fieldName];
-
-  // Determine if the event is 'allDay' based on formData
-  // Handle boolean true/false and string 'true'/'false'/'True'
   const isAllDay = formData.allDay === true || String(formData.allDay).toLowerCase() === 'true';
 
   return (
     <Stack spacing={3}>
-      {/* --- Event Details --- */}
       <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, position: 'relative' }}>
         <Typography variant="overline" component="legend" sx={{ position: 'absolute', top: -10, left: 10, bgcolor: 'background.paper', px: 0.5 }}>
           Event Details
         </Typography>
         <Stack spacing={2} mt={1}>
-          {/* Event Name */}
           <TextField
             label="Holiday Name"
             name="holidayName"
-            value={formData.holidayName || ""} // Controlled by formData prop
-            onChange={onChange} // Notify parent of change
+            value={formData.holidayName || ""}
+            onChange={onChange}
             error={!!getError('holidayName')}
-            helperText={getError('holidayName') || ' '} // Add space for consistent layout
+            helperText={getError('holidayName') || ' '}
             fullWidth
             required
             autoFocus
             variant="outlined"
             size="small"
           />
-
-          {/* Event Code Display (Read-only for context if editing, usually hidden) */}
-          {/* {mode === 'edit' && formData.eventCode && ( <TextField label="Event Code (Read Only)" ... /> )} */}
-
-           {/* Notes */}
            <TextField
              label="Notes (Optional)"
              name="notes"
@@ -68,32 +55,26 @@ export default function EventForm({
              variant="outlined"
              size="small"
            />
-
-            {/* All Day Checkbox */}
             <FormControlLabel
                 control={
                 <Checkbox
-                    // Use the derived isAllDay boolean for checked state
                     checked={isAllDay}
-                    onChange={onChange} // Notify parent of change
+                    onChange={onChange}
                     name="allDay"
                     size="small"
                 />
                 }
                 label="All Day Event"
-                sx={{ pt: 1 }} // Add some padding top
+                sx={{ pt: 1 }}
             />
         </Stack>
       </Box>
-
-      {/* --- Event Dates & Times --- */}
       <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, position: 'relative' }}>
         <Typography variant="overline" component="legend" sx={{ position: 'absolute', top: -10, left: 10, bgcolor: 'background.paper', px: 0.5 }}>
           Date & Time
         </Typography>
-        <Grid container spacing={2} mt={0.5}> {/* Use Grid for layout */}
-           {/* Start Date */}
-           <Grid item xs={12} sm={isAllDay ? 6 : 4}> {/* Adjust width based on allDay */}
+        <Grid container spacing={2} mt={0.5}>
+           <Grid item xs={12} sm={isAllDay ? 6 : 4}>
                 <TextField
                     label="Start Date"
                     name="startDate"
@@ -109,30 +90,25 @@ export default function EventForm({
                     size="small"
                 />
            </Grid>
-
-           {/* Start Time (Only if NOT All Day) */}
            {!isAllDay && (
                 <Grid item xs={12} sm={4}>
                     <TextField
                         label="Start Time"
-                        name="startHour" // Correct name matching validation/data
+                        name="startHour" 
                         type="time"
-                        value={formData.startHour || ""} // Default might be needed if validation requires it
+                        value={formData.startHour || ""}
                         onChange={onChange}
                         error={!!getError('startHour')}
                         helperText={getError('startHour') || ' '}
                         InputLabelProps={{ shrink: true }}
                         fullWidth
-                        required={!isAllDay} // Required only if not all day
+                        required={!isAllDay}
                         variant="outlined"
                         size="small"
-                        inputProps={{ step: 300 }} // Optional: 5 minute steps
+                        inputProps={{ step: 300 }}
                     />
                 </Grid>
             )}
-
-           {/* End Date */}
-           {/* Required if All Day, might be optional for timed if duration set by time */}
            <Grid item xs={12} sm={isAllDay ? 6 : 4}>
                 <TextField
                     label="End Date"
@@ -144,22 +120,17 @@ export default function EventForm({
                     helperText={getError('endDate') || ' '}
                     InputLabelProps={{ shrink: true }}
                     fullWidth
-                    // Conditionally required based on allDay? Validation handles this.
-                    // required={isAllDay}
                     variant="outlined"
                     size="small"
                 />
            </Grid>
-
-
-           {/* End Time (Only if NOT All Day) */}
             {!isAllDay && (
                 <Grid item xs={12} sm={4}>
                     <TextField
                         label="End Time"
-                        name="endHour" // Correct name matching validation/data
+                        name="endHour"
                         type="time"
-                        value={formData.endHour || ""} // Default might be needed
+                        value={formData.endHour || ""}
                         onChange={onChange}
                         error={!!getError('endHour')}
                         helperText={getError('endHour') || ' '}
@@ -174,8 +145,6 @@ export default function EventForm({
             )}
         </Grid>
       </Box>
-
-      {/* NO SUBMIT BUTTON HERE */}
     </Stack>
   );
 }

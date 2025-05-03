@@ -2,72 +2,48 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Stack, Alert, Box, CircularProgress } from "@mui/material";
-import PopupModal from "../UI/PopupModal"; // Base modal component
-import StudentForm from "./forms/StudentForm"; // The presentation form component
-import CustomButton from "../UI/CustomButton"; // Styled button
-import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers"; // Central handler
-// Import validation function directly into the modal for pre-handler check
+import PopupModal from "../UI/PopupModal";
+import StudentForm from "./forms/StudentForm";
+import CustomButton from "../UI/CustomButton";
+import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers";
 import { validateStudentForm } from "../../utils/validateForm";
-// Import getRecords only if needed for extra data NOT passed from parent (usually not needed)
-// import { getRecords } from "../../utils/storage";
 
-// This modal handles both Adding and Editing students.
 export default function StudentFormModal({
-    open,             // Boolean: Controls modal visibility (from parent page)
-    onClose,          // Function: Callback to close the modal (from parent page)
-    onSaveSuccess,    // Function: Callback after successful save (triggers refresh in parent)
-    initialData,      // Object | null: Student data for editing, null for adding
-    existingStudents  // Array: List of existing students for uniqueness validation (passed from parent)
+    open,
+    onClose,
+    onSaveSuccess,
+    initialData,
+    existingStudents
 }) {
-    // Determine mode ('add' or 'edit') based on the presence of initialData
     const mode = initialData ? "edit" : "add";
     const isEditMode = mode === "edit";
-
-    // --- State Management within the Modal ---
-    // formData holds the current state of the form fields
     const [formData, setFormData] = useState({});
-    // errors holds field-specific validation errors
     const [errors, setErrors] = useState({});
-    // generalError holds non-field specific errors (e.g., save failure)
     const [generalError, setGeneralError] = useState("");
-    // isLoading tracks the async save operation
     const [isLoading, setIsLoading] = useState(false);
-
-    // --- Effects ---
-    // Effect to initialize or reset form data when the modal opens or relevant props change
     useEffect(() => {
         if (open) {
-            // Define the default empty structure for a student form
             const defaultFormStructure = {
                 id: "", firstName: "", lastName: "", email: "", username: "",
                 phone: "", password: "", confirmPassword: ""
             };
-
-            // If editing, merge initialData into the default structure
-            // Clear password fields for security/UX reasons in edit mode
             if (isEditMode && initialData) {
                 console.log("[StudentModal] Initializing EDIT mode with data:", initialData);
                 setFormData({
-                    ...defaultFormStructure, // Start with default structure
-                    ...initialData,          // Override with existing data
-                    password: "",           // Always clear password field
-                    confirmPassword: ""     // Always clear confirmation field
+                    ...defaultFormStructure,
+                    ...initialData,
+                    password: "",
+                    confirmPassword: ""
                 });
             } else {
-                // If adding, use the default empty structure
                 console.log("[StudentModal] Initializing ADD mode.");
                 setFormData(defaultFormStructure);
             }
-            // Reset errors and loading state every time the modal opens or data changes
             setErrors({});
             setGeneralError("");
             setIsLoading(false);
         }
-        // Dependencies ensure re-initialization if modal opens/closes or edit data changes
     }, [open, initialData, isEditMode]);
-
-    // --- Handlers ---
-    // Callback passed to StudentForm to update local formData state on field changes
     const handleFormChange = useCallback((event) => {
         const { name, value, type, checked } = event.target;
         const newValue = type === 'checkbox' ? checked : value;
@@ -76,25 +52,15 @@ export default function StudentFormModal({
             ...prev,
             [name]: newValue,
         }));
-
-        // Clear validation error for the specific field being changed
         if (errors[name]) {
             setErrors((prev) => {
                 const newErrors = { ...prev };
-                delete newErrors[name]; // Remove the specific error
+                delete newErrors[name];
                 return newErrors;
             });
         }
-        // Clear any general error message when the user types
         setGeneralError("");
-    }, [errors]); // Dependency: errors state (needed to clear specific errors)
-
-    // Handle the Save / Update button click
-// src/components/modals/StudentFormModal.jsx
-
-// Assuming imports and other parts of the component are defined as in the previous response...
-
-    // Handle the Save / Update button click - REVISED LOGIC
+    }, [errors]);
     const handleSave = useCallback(async () => {
       setIsLoading(true);
       setErrors({}); // Clear previous UI errors
@@ -169,42 +135,31 @@ export default function StudentFormModal({
       }
   }, [
       formData, mode, isEditMode, initialData, existingStudents, onClose, onSaveSuccess
-  ]); // Dependencies
-
-    // --- Render Logic ---
+  ]);
     return (
         <PopupModal
             open={open}
             onClose={onClose}
             title={isEditMode ? `Edit Student: ${initialData?.firstName || ''} ${initialData?.lastName || ''}` : "Add New Student"}
         >
-            {/* Using Stack for direct content padding instead of FormWrapper */}
-            <Stack spacing={3} sx={{ p: { xs: 2, sm: 3 } }}> {/* Responsive padding */}
-
-                {/* General Error Alert Area */}
+            <Stack spacing={3} sx={{ p: { xs: 2, sm: 3 } }}>
                 {generalError && <Alert severity="error" sx={{ mb: 1 }}>{generalError}</Alert>}
-
-                {/* The Reusable Student Form Component */}
                 <StudentForm
                     formData={formData}
                     errors={errors}
                     onChange={handleFormChange}
                     mode={mode}
-                    // No selectOptions needed for this specific form
                 />
-
-                {/* Modal Action Buttons */}
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 1 }}>
                     <CustomButton
                         variant="outlined"
                         onClick={onClose}
-                        disabled={isLoading} // Disable while saving
+                        disabled={isLoading}
                     >
                         Cancel
                     </CustomButton>
                     <CustomButton
                         onClick={handleSave}
-                        // Disable if loading OR if there are any validation errors currently shown
                         disabled={isLoading || Object.values(errors).some(e => !!e)}
                         startIcon={isLoading ? <CircularProgress size={20} color="inherit" /> : null}
                     >

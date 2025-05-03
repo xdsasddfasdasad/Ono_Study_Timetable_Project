@@ -5,49 +5,42 @@ import { getStudentEvents } from '../utils/getStudentEvents';
 import { useAuth } from './AuthContext';
 
 const EventsContext = createContext(null);
-
 export const EventsProvider = ({ children }) => {
   const { currentUser } = useAuth();
   const [studentEvents, setStudentEvents] = useState([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
-
   const fetchEvents = useCallback(() => {
     if (currentUser && currentUser.id) {
       console.log(`EventsContext: Fetching events for student ID: ${currentUser.id}`);
-      setIsLoadingEvents(true); // Set loading true *before* fetching
+      setIsLoadingEvents(true);
       try {
         const filteredEvents = getStudentEvents(currentUser.id);
         setStudentEvents(filteredEvents);
         console.log(`EventsContext: Fetched ${filteredEvents.length} events.`);
       } catch (error) {
         console.error("Error fetching student events:", error);
-        setStudentEvents([]); // Clear events on error
+        setStudentEvents([]);
       } finally {
-        setIsLoadingEvents(false); // Set loading false *after* fetching/error
+        setIsLoadingEvents(false);
       }
     } else {
-      // No user or user logged out
       setStudentEvents([]);
-      setIsLoadingEvents(false); // Ensure loading is false if no user
+      setIsLoadingEvents(false); 
       console.log("EventsContext: No user logged in, events cleared.");
     }
-  }, [currentUser]); // Dependency: re-create fetchEvents if currentUser changes
-
-
+  }, [currentUser]);
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]); 
 
 const refreshStudentEvents = () => {
   console.log("EventsContext: Manual refresh triggered.");
-  fetchEvents(); // Simply call the memoized fetch function
+  fetchEvents();
 };
-
-// Value provided by the context
 const value = {
   studentEvents,
   isLoadingEvents,
-  refreshStudentEvents, // ✅ Expose the refresh function
+  refreshStudentEvents,
 };
 
 return (
@@ -56,8 +49,6 @@ return (
   </EventsContext.Provider>
 );
 };
-
-// Custom hook remains the same
 export const useEvents = () => {
 const context = useContext(EventsContext);
 if (context === undefined) {

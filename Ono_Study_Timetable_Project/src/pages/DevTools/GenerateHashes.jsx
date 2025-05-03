@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { hashPassword } from "../../utils/hash"; // adjust path if needed
+import { hashPassword } from "../../utils/hash";
 
 export default function GenerateHashes() {
   useEffect(() => {

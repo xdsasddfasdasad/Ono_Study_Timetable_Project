@@ -7,44 +7,35 @@ import {
   Box,
   Typography
 } from "@mui/material";
-
-// Simple presentation component for Lecturer data
 export default function LecturerForm({
-  formData = {},   // Current lecturer data (passed from parent modal)
-  errors = {},     // Validation errors (passed from parent modal)
-  onChange,      // Callback function to notify parent of changes
-  mode = "add",    // 'add' or 'edit'
-  // selectOptions prop is accepted for consistency
+  formData = {},
+  errors = {},
+  onChange,
+  mode = "add",
   selectOptions = {}
 }) {
 
-  // Helper function to get error message for a field
   const getError = (fieldName) => errors[fieldName];
-
   return (
     <Stack spacing={3}>
-      {/* --- Lecturer Details --- */}
       <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, position: 'relative' }}>
         <Typography variant="overline" component="legend" sx={{ position: 'absolute', top: -10, left: 10, bgcolor: 'background.paper', px: 0.5 }}>
           Lecturer Details
         </Typography>
         <Stack spacing={2} mt={1}>
-          {/* Lecturer Name */}
           <TextField
             label="Lecturer Name"
             name="name"
-            value={formData.name || ""} // Controlled by formData prop
-            onChange={onChange} // Notify parent of change
+            value={formData.name || ""}
+            onChange={onChange} 
             error={!!getError('name')}
-            helperText={getError('name') || ' '} // Add space for consistent layout
+            helperText={getError('name') || ' '}
             fullWidth
-            required // Mark visually as required
-            autoFocus // Focus on this field when form opens
+            required
+            autoFocus
             variant="outlined"
-            size="small" // Consistent size
+            size="small"
           />
-
-          {/* Optional: Email */}
           <TextField
             label="Email (Optional)"
             name="email"
@@ -57,8 +48,6 @@ export default function LecturerForm({
             variant="outlined"
             size="small"
           />
-
-           {/* Optional: Phone */}
            <TextField
              label="Phone (Optional)"
              name="phone"
@@ -71,26 +60,8 @@ export default function LecturerForm({
              variant="outlined"
              size="small"
            />
-
-          {/* Lecturer ID Display (Read-only for context if editing, usually hidden) */}
-          {/* Avoid showing internal IDs unless necessary */}
-           {/* {mode === 'edit' && formData.id && (
-                <TextField
-                    label="Lecturer ID (Read Only)"
-                    value={formData.id}
-                    fullWidth
-                    disabled
-                    variant="outlined"
-                    size="small"
-                    InputProps={{ readOnly: true }}
-                    sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}
-                />
-           )} */}
-
         </Stack>
       </Box>
-
-      {/* NO SUBMIT BUTTON HERE - Parent modal handles submission */}
     </Stack>
   );
 }

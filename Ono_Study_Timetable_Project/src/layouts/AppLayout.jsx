@@ -1,19 +1,25 @@
-// /src/layouts/AppLayout.jsx
+import React from 'react';
 import { Outlet } from "react-router-dom";
 import HeaderNavigationBar from "../components/Header/HeaderNavigationBar";
-import { Box, Container } from "@mui/material";
+import Footer from "../components/Footer/Footer";
+import { Box, Container, Toolbar, useTheme } from "@mui/material";
 
 const AppLayout = () => {
-  console.log("AppLayout rendering..."); // בדוק אם ה-Layout מרונדר
+  const theme = useTheme();
+
   return (
-    <>
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <HeaderNavigationBar />
-      <Box component="main" sx={{ mt: 10 }}>
-        <Container maxWidth="lg">
-          <Outlet />
-        </Container>
-      </Box>
-    </>
+        <Toolbar />
+          <Box component="main" sx={{ flexGrow: 1}}>
+            <Container /* ... */>
+              <Outlet />
+            </Container>
+        </Box>
+      <Footer /> 
+    </Box>
+
+    
   );
 };
 

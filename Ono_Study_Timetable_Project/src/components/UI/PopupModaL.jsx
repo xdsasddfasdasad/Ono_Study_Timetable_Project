@@ -8,7 +8,6 @@ import {
   DialogActions,
   IconButton,
   Typography,
-  Box
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 
@@ -35,12 +34,9 @@ const PopupModal = ({ open, onClose, title, children, actions }) => {
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
-
       <DialogContent dividers>
         {children}
       </DialogContent>
-
       {actions && (
         <DialogActions>
           {actions}

@@ -5,8 +5,8 @@ import {
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { hashPassword } from "../utils/hash";
-import { useAuth } from "../context/AuthContext.jsx"; // ודא נתיב
-import { getRecords } from "../utils/storage"; // ודא נתיב
+import { useAuth } from "../context/AuthContext.jsx";
+import { getRecords } from "../utils/storage";
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({ username: "", password: "" });
@@ -14,60 +14,50 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuth();
-
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
-
-  //  הוספת לוגים לפונקציית הלוגין
   const handleLogin = async (e) => {
     e.preventDefault();
-    console.log("[LoginPage] handleLogin START"); // <-- לוג 1: האם הפונקציה נקראת?
+    console.log("[LoginPage] handleLogin START");
     setError("");
     setIsLoading(true);
-
     try {
-      console.log("[LoginPage] Getting students records..."); // <-- לוג 2
+      console.log("[LoginPage] Getting students records...");
       const students = getRecords("students");
-      console.log(`[LoginPage] Found ${students ? students.length : 0} students.`); // <-- לוג 3
-
+      console.log(`[LoginPage] Found ${students ? students.length : 0} students.`);
       if (!students || students.length === 0) {
-         console.error("[LoginPage] No student data found."); // <-- לוג שגיאה 1
+         console.error("[LoginPage] No student data found.");
          throw new Error("No student data found. Please seed the data.");
       }
-
-      console.log(`[LoginPage] Hashing password for user: ${formData.username}`); // <-- לוג 4
+      console.log(`[LoginPage] Hashing password for user: ${formData.username}`);
       const hashedInputPassword = await hashPassword(formData.password);
-      console.log("[LoginPage] Password hashed."); // <-- לוג 5
-
-      console.log("[LoginPage] Finding matching student..."); // <-- לוג 6
+      console.log("[LoginPage] Password hashed.");
+      console.log("[LoginPage] Finding matching student...");
       const matchedStudent = students.find(
         (student) =>
           student.username === formData.username &&
           student.password === hashedInputPassword
       );
-      console.log("[LoginPage] Matched student:", matchedStudent); // <-- לוג 7: האם נמצא סטודנט?
-
+      console.log("[LoginPage] Matched student:", matchedStudent);
       if (matchedStudent) {
-        console.log("[LoginPage] Student matched! Calling login function from context..."); // <-- לוג 8
-        // --- קריאה לקונטקסט ---
-        login(matchedStudent); // הפונקציה הזו צריכה להדפיס לוגים משלה
-        // ----------------------
-        console.log("[LoginPage] Context login function called. Navigating to /home..."); // <-- לוג 9
+        console.log("[LoginPage] Student matched! Calling login function from context...");
+        login(matchedStudent);
+        console.log("[LoginPage] Context login function called. Navigating to /home...");
         navigate("/home");
       } else {
-        console.warn("[LoginPage] Invalid username or password."); // <-- לוג אזהרה
+        console.warn("[LoginPage] Invalid username or password.");
         setError("Invalid username or password.");
       }
     } catch (err) {
-        console.error("[LoginPage] ERROR in handleLogin:", err); // <-- לוג שגיאה 2
+        console.error("[LoginPage] ERROR in handleLogin:", err);
         setError(err.message || "An error occurred during login.");
     } finally {
-      console.log("[LoginPage] handleLogin FINALLY block."); // <-- לוג 10
+      console.log("[LoginPage] handleLogin FINALLY block.");
       setIsLoading(false);
     }
-    console.log("[LoginPage] handleLogin END"); // <-- לוג 11
+    console.log("[LoginPage] handleLogin END");
   };
 
   return (
@@ -79,8 +69,8 @@ export default function LoginPage() {
       border="1px solid #ccc"
       borderRadius={2}
       boxShadow={3}
-      component="form" // Make it a form element for accessibility
-      onSubmit={handleLogin} // Handle submission via onSubmit
+      component="form"
+      onSubmit={handleLogin}
     >
       <Typography variant="h5" mb={2} textAlign="center">
         Login
@@ -92,8 +82,8 @@ export default function LoginPage() {
           value={formData.username}
           onChange={handleChange}
           fullWidth
-          required // Add basic HTML validation
-          disabled={isLoading} // Disable input while loading
+          required
+          disabled={isLoading}
         />
         <TextField
           label="Password"
@@ -102,15 +92,15 @@ export default function LoginPage() {
           value={formData.password}
           onChange={handleChange}
           fullWidth
-          required // Add basic HTML validation
-          disabled={isLoading} // Disable input while loading
+          required
+          disabled={isLoading}
         />
         {error && <Alert severity="error">{error}</Alert>}
         <Button
           variant="contained"
           fullWidth
-          type="submit" // Use type="submit"
-          disabled={isLoading} // Disable button while loading
+          type="submit"
+          disabled={isLoading}
         >
           {isLoading ? <CircularProgress size={24} /> : "Login"}
         </Button>

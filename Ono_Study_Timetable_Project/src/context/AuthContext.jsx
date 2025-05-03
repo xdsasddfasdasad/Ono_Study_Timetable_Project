@@ -3,15 +3,12 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { getRecords } from '../utils/storage';
 
 const AuthContext = createContext(null);
-
 export const AuthProvider = ({ children }) => {
   console.log("AuthProvider rendering...");
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-
   useEffect(() => {
     console.log("AuthProvider useEffect START");
-    // הסרנו את isMounted
     try {
       const loggedInUserId = localStorage.getItem('loggedInUserId');
       console.log("AuthProvider useEffect - User ID from localStorage:", loggedInUserId);
@@ -20,25 +17,23 @@ export const AuthProvider = ({ children }) => {
         const user = students ? students.find(s => s.id === loggedInUserId) : null;
         if (user) {
           console.log("AuthProvider useEffect - User found, setting currentUser.");
-          setCurrentUser(user); // קריאה ישירה
+          setCurrentUser(user);
         } else {
           console.log("AuthProvider useEffect - User ID found but user invalid/missing, clearing localStorage & currentUser.");
           localStorage.removeItem('loggedInUserId');
-          setCurrentUser(null); // קריאה ישירה
+          setCurrentUser(null);
         }
       } else {
          console.log("AuthProvider useEffect - No user ID found, ensuring currentUser is null.");
-         // אין צורך לקרוא ל-setCurrentUser(null) אם הוא כבר null
          if (currentUser !== null) {
             setCurrentUser(null);
          }
       }
     } catch (error) {
         console.error("AuthProvider useEffect - ERROR:", error);
-        setCurrentUser(null); // נקה משתמש במקרה שגיאה
+        setCurrentUser(null);
     } finally {
         console.log("AuthProvider useEffect - FINALLY block reached.");
-        // ✅ פשוט קרא ל-setIsLoading(false) כאן
         console.log("AuthProvider useEffect - Setting isLoading to false.");
         setIsLoading(false);
     }
@@ -46,10 +41,9 @@ export const AuthProvider = ({ children }) => {
   const login = (student) => {
     console.log("AuthContext: login function called with student:", student);
     if (student && student.id) {
-      // ✅ הוספת לוגים קריטיים כאן
       console.log(`AuthContext: --- BEFORE calling setCurrentUser for student ID: ${student.id} ---`);
       try {
-        setCurrentUser(student); // <-- הפעולה הקריטית
+        setCurrentUser(student);
         console.log(`AuthContext: --- AFTER calling setCurrentUser. State update should be queued. ---`);
 
         console.log(`AuthContext: Setting loggedInUserId in localStorage to: ${student.id}`);
@@ -58,7 +52,6 @@ export const AuthProvider = ({ children }) => {
       } catch (error) {
         console.error("AuthContext: Error during login state/storage update:", error);
       }
-      // -------------------------
     } else {
       console.error("AuthContext: Login attempt with invalid or missing student data:", student);
     }

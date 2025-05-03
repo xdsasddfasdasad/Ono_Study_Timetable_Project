@@ -6,16 +6,12 @@ import PopupModal from "../UI/PopupModal";
 import FormWrapper from "../UI/FormWrapper";
 import CustomButton from "../UI/CustomButton";
 import { recordTypeLabels, getEntityKeyByRecordType, generateInitialFormData } from "../../utils/formMappings";
-
-// Import Handlers and Storage
 import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers";
 import { getRecords } from "../../utils/storage";
-
-// Import ALL possible form components
 import YearForm from "./forms/YearForm";
 import SemesterForm from "./forms/SemesterForm";
 import LecturerForm from "./forms/LecturerForm";
-import CourseMeetingForm from "./forms/CourseMeetingForm"; // Use alias
+import CourseMeetingForm from "./forms/CourseMeetingForm";
 import TaskForm from "./forms/TaskForm";
 import SiteForm from "./forms/SiteForm";
 import RoomForm from "./forms/RoomForm";
@@ -23,7 +19,6 @@ import HolidayForm from "./forms/HolidayForm";
 import VacationForm from "./forms/VacationForm";
 import EventForm from "./forms/EventForm";
 
-// Map recordType to the actual Form Component
 const formComponentMap = {
   year: YearForm,
   semester: SemesterForm,
@@ -37,13 +32,12 @@ const formComponentMap = {
   event: EventForm,
 };
 const addableRecordTypeLabels = Object.entries(recordTypeLabels)
-    .filter(([key]) => key in formComponentMap) // Only show types with a mapped form component
+    .filter(([key]) => key in formComponentMap)
     .reduce((acc, [key, label]) => {
         acc[key] = label;
         return acc;
     }, {});
 
-// --- Main Component ---
 export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }) {
   const [recordType, setRecordType] = useState("");
   const [formData, setFormData] = useState({});
@@ -83,7 +77,6 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
     }
   }, [open]); 
 
-  // --- Effects ---
   useEffect(() => {
     if (!open) {
       setRecordType(""); setFormData({}); setErrors({}); setGeneralError(""); setIsLoading(false);
@@ -103,7 +96,6 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
     }, [recordType, defaultDate, open]);
 
 
-  // --- Handlers ---
   const handleRecordTypeChange = useCallback((event) => {
     setRecordType(event.target.value);
   }, []);

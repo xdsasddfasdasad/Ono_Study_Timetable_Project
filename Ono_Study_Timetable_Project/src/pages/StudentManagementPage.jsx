@@ -7,21 +7,16 @@ import {
 } from "@mui/material";
 import { Delete, Edit, Add as AddIcon } from "@mui/icons-material";
 import { getRecords } from "../utils/storage";
-import { handleDeleteEntityFormSubmit } from "../handlers/formHandlers"; // Import delete handler
-import StudentFormModal from "../components/modals/StudentFormModal"; // Import the new generic modal
+import { handleDeleteEntityFormSubmit } from "../handlers/formHandlers";
+import StudentFormModal from "../components/modals/StudentFormModal";
 
-// --- Main Student Management Page Component ---
 export default function StudentManagementPage() {
-  // State for the list of students
   const [students, setStudents] = useState([]);
-  // State for loading and errors during initial load or refresh
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  // State for controlling the Add/Edit modal
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [studentToEdit, setStudentToEdit] = useState(null); // null for Add mode, student object for Edit mode
+  const [studentToEdit, setStudentToEdit] = useState(null);
 
-  // Fetch students from storage on component mount
   const loadStudents = useCallback(() => {
     console.log("[StudentPage] Loading students...");
     setIsLoading(true);
@@ -36,60 +31,53 @@ export default function StudentManagementPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []); // No dependencies needed for initial load from storage
+  }, []);
 
   useEffect(() => {
     loadStudents();
-  }, [loadStudents]); // Load on mount
+  }, [loadStudents]);
 
-  // --- Modal Control Handlers ---
   const handleOpenAddModal = () => {
-    setStudentToEdit(null); // Ensure Add mode
+    setStudentToEdit(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (student) => {
-    setStudentToEdit(student); // Set student data for Edit mode
+    setStudentToEdit(student);
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setStudentToEdit(null); // Clear selection on close
+    setStudentToEdit(null);
   };
 
-  // Callback triggered by the modal after a successful save (add or edit)
   const handleSaveSuccess = () => {
     console.log("[StudentPage] Save successful, reloading student list...");
-    loadStudents(); // Refresh the student list from storage
-    // Optional: Show success notification (Snackbar)
+    loadStudents();
   };
 
-  // --- Delete Handler ---
   const handleDeleteStudent = useCallback((studentId, studentName) => {
     if (!studentId) return;
 
     if (window.confirm(`Are you sure you want to delete student "${studentName}" (ID: ${studentId})? This action cannot be undone.`)) {
       console.log(`[StudentPage] Deleting student ${studentId}...`);
-      // Directly call the delete handler
       handleDeleteEntityFormSubmit(
-        "students", // entityKey
-        studentId,  // recordIdentifier (the student's ID)
-        (successMessage) => { // onSuccess
+        "students",
+        studentId,
+        (successMessage) => {
           console.log("[StudentPage] Delete successful:", successMessage);
           alert(successMessage || "Student deleted successfully.");
-          loadStudents(); // Refresh the list
+          loadStudents();
         },
-        (errorMessage) => { // onError
+        (errorMessage) => {
           console.error("[StudentPage] Delete failed:", errorMessage);
           alert(`Error deleting student: ${errorMessage}`);
         }
-        // No parentIdentifier needed for top-level students
       );
     }
-  }, [loadStudents]); // Dependency on loadStudents to refresh
+  }, [loadStudents]);
 
-  // --- Render Logic ---
   return (
     <Box sx={{ padding: { xs: "1rem", md: "2rem" }, maxWidth: "1200px", margin: "auto" }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
@@ -121,7 +109,6 @@ export default function StudentManagementPage() {
             <TableBody>
               {students.map((student) => (
                 <TableRow key={student.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-                  {/* Make name clickable for editing */}
                   <TableCell component="th" scope="row">
                     <Button variant="text" size="small" onClick={() => handleOpenEditModal(student)} sx={{ textTransform: 'none', textAlign: 'left', p: 0 }}>
                       {student.firstName} {student.lastName}
@@ -151,14 +138,12 @@ export default function StudentManagementPage() {
         </TableContainer>
       )}
 
-      {/* Render the SINGLE generic modal for Add/Edit */}
-      {/* Pass the existing students list for validation purposes */}
       <StudentFormModal
         open={isModalOpen}
         onClose={handleCloseModal}
-        onSaveSuccess={handleSaveSuccess} // Callback on success
-        initialData={studentToEdit}       // null for Add, student object for Edit
-        existingStudents={students}       // Pass for validation checks
+        onSaveSuccess={handleSaveSuccess} 
+        initialData={studentToEdit} 
+        existingStudents={students}
       />
     </Box>
   );

@@ -6,28 +6,21 @@ import {
 import PopupModal from "../UI/PopupModal";
 import FormWrapper from "../UI/FormWrapper";
 import CustomButton from "../UI/CustomButton";
-
-// Import Helpers from the utility file
 import {
     recordTypeLabels,
     getEntityKeyByRecordType,
-    getPrimaryKeyFieldByRecordType // Use the helper
-} from "../../utils/formMappings"; // Adjust path
-
-// Import Handlers and Storage utils
+    getPrimaryKeyFieldByRecordType
+} from "../../utils/formMappings";
 import {
     handleSaveOrUpdateRecord,
     handleDeleteEntityFormSubmit
 } from "../../handlers/formHandlers";
 import { getRecords } from "../../utils/storage";
-
-// Import ALL possible form components
 import YearForm from "./forms/YearForm";
 import SemesterForm from "./forms/SemesterForm";
 import LecturerForm from "./forms/LecturerForm";
 import CourseForm from "./forms/CourseForm";
-// Renaming the component usage here, assuming the file itself might be renamed later
-import CourseMeetingForm from "./forms/CourseMeetingForm"; // Use CourseMeetingForm alias
+import CourseMeetingForm from "./forms/CourseMeetingForm";
 import TaskForm from "./forms/TaskForm";
 import SiteForm from "./forms/SiteForm";
 import RoomForm from "./forms/RoomForm";
@@ -35,13 +28,12 @@ import HolidayForm from "./forms/HolidayForm";
 import VacationForm from "./forms/VacationForm";
 import EventForm from "./forms/EventForm";
 
-// Map recordType to the actual Form Component
 const formComponentMap = {
     year: YearForm,
     semester: SemesterForm,
     lecturer: LecturerForm,
-    course: CourseForm, // For Course Definition (if ever used here, likely not)
-    courseMeeting: CourseMeetingForm, // For single meeting instance
+    course: CourseForm,
+    courseMeeting: CourseMeetingForm,
     task: TaskForm,
     site: SiteForm,
     room: RoomForm,
@@ -50,47 +42,33 @@ const formComponentMap = {
     event: EventForm,
 };
 
-
-// --- Main Component ---
 export default function TimeTableEditModal({
     open,
     onClose,
     onSave,
-    initialData, // The object containing the data for the record to edit
-    recordType // The type ('year', 'courseMeeting', etc.) passed from the parent
+    initialData,
+    recordType
 }) {
     const [formData, setFormData] = useState({});
     const [errors, setErrors] = useState({});
     const [generalError, setGeneralError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
-
-    // Determine the form component and primary key field using helpers
     const FormComponent = recordType ? formComponentMap[recordType] : null;
-    // ✅ Use helper from formMappings
     const primaryKeyField = recordType ? getPrimaryKeyFieldByRecordType(recordType) : null;
-
-    // --- Preload data for Select dropdowns (Memoized) ---
-    // This data is needed by various forms (e.g., SemesterForm needs years, RoomForm needs sites)
     const selectOptions = useMemo(() => {
-        if (!open) return {}; // Don't load if not open
+        if (!open) return {};
         console.log("[EditModal] Loading data for select options...");
         try {
-            // Fetch data needed by ANY of the potential forms
             const years = getRecords("years") || [];
             const sites = getRecords("sites") || [];
             const lecturers = getRecords("lecturers") || [];
             const courses = getRecords("courses") || [];
-            // Extract semesters if needed separately (e.g., for CourseForm)
             const allSemesters = years.flatMap(y => (y.semesters || []).map(s => ({ ...s, yearLabel: `Year ${y.yearNumber}` })));
             const formattedRooms = sites.flatMap(site =>
                 (site.rooms || []).map(room => ({
-                    // value יהיה קוד החדר
                     value: room.roomCode,
-                    // label ישלב את שם החדר ושם האתר
                     label: `${room.roomName || `Room (${room.roomCode})`} @ ${site.siteName || `Site (${site.siteCode})`}`
-                    // אפשר להוסיף גם siteCode אם צריך לסינון עתידי
-                    // siteCode: site.siteCode
                 }))
             );
 
@@ -104,13 +82,9 @@ export default function TimeTableEditModal({
             };
         } catch (error) {
              console.error("[EditModal] Error loading data for select options:", error);
-             // Return empty arrays to prevent crashes in forms
              return { years: [], sites: [], lecturers: [], courses: [], semesters: [] };
         }
-    }, [open]); // Reload options when modal opens
-
-
-    // --- Effects ---
+    }, [open]);
     useEffect(() => {
         if (open && initialData) {
             console.log(`[EditModal] Initializing form for type: ${recordType} with data:`, initialData);
@@ -121,9 +95,6 @@ export default function TimeTableEditModal({
             setIsDeleting(false);
         }
     }, [open, initialData, recordType]);
-
-
-    // --- Handlers ---
     const handleFormChange = useCallback((event) => {
         const { name, value, type, checked } = event.target;
         const newValue = type === 'checkbox' ? checked : value;
@@ -136,11 +107,10 @@ export default function TimeTableEditModal({
              }
             return updatedData;
         });
-    
+
         if (errors[name]) { setErrors((prev) => ({ ...prev, [name]: undefined })); }
         setGeneralError("");
     }, [errors]);
-
     const handleUpdateClick = useCallback(async () => {
         if (!recordType || !FormComponent || !formData || !primaryKeyField) {
             setGeneralError("Cannot update: Missing component configuration."); return;
@@ -149,14 +119,11 @@ export default function TimeTableEditModal({
         if (!recordId) {
              setGeneralError("Cannot update: Record ID is missing in form data."); return;
         }
-
         setIsLoading(true);
         setErrors({});
         setGeneralError("");
-
         const entityKey = getEntityKeyByRecordType(recordType);
         if (!entityKey) {setIsLoading(false); return; }
-
         let dataToSave = { ...formData };
         let validationExtra = { editingId: recordId, recordType: recordType };
         if (recordType === 'semester') {
@@ -184,14 +151,11 @@ export default function TimeTableEditModal({
                 validationExtra[`existing${entityKey.charAt(0).toUpperCase() + entityKey.slice(1)}`] = allRecords.filter(r => r[idField] !== recordId);
             } catch (e) { console.error("Error getting records for validation", e); }
         }
-
         console.log(`[EditModal] Updating recordType: ${recordType}, entityKey: ${entityKey}, ID: ${recordId}`);
         console.log("[EditModal] Data to save:", dataToSave);
         console.log("[EditModal] Validation extra:", validationExtra);
-
         const result = await handleSaveOrUpdateRecord(entityKey, dataToSave, "edit", validationExtra);
         setIsLoading(false);
-
         if (result.success) {
             console.log("[EditModal] Update successful.");
             onSave?.(); onClose?.();
@@ -201,15 +165,12 @@ export default function TimeTableEditModal({
             setGeneralError(result.message || "Failed to update record.");
         }
     }, [recordType, formData, FormComponent, primaryKeyField, onSave, onClose]);
-
-
     const handleDeleteClick = useCallback(() => {
         if (!recordType || !formData || !primaryKeyField) { return; }
         const recordId = formData[primaryKeyField];
         if (!recordId) { return; }
         const entityKey = getEntityKeyByRecordType(recordType);
         if (!entityKey) {return; }
-
         let parentId = null;
         if (recordType === 'semester') {
             parentId = formData.yearCode; 
@@ -218,14 +179,11 @@ export default function TimeTableEditModal({
              parentId = formData.siteCode;
              if (!parentId) { setGeneralError("Cannot delete room: Parent Site ID missing."); return; }
         }
-
         const recordLabel = formData.name || formData.eventName || formData.courseName || formData.holidayName || formData.roomName || formData.siteName || formData.assignmentName || recordId;
         if (!window.confirm(`Are you sure you want to delete "${recordLabel}" (${recordType})?`)) return;
-
         setIsDeleting(true);
         setGeneralError(""); setErrors({});
         console.log(`[EditModal] Deleting recordType: ${recordType}, entityKey: ${entityKey}, ID: ${recordId}, ParentID: ${parentId}`);
-
         handleDeleteEntityFormSubmit(
             entityKey,
             recordId,
@@ -244,8 +202,6 @@ export default function TimeTableEditModal({
         );
 
     }, [recordType, formData, primaryKeyField, onSave, onClose]);
-
-
     return (
         <PopupModal open={open} onClose={onClose} title={`Edit ${recordTypeLabels[recordType] || 'Record'}`}>
             <FormWrapper>
@@ -258,10 +214,6 @@ export default function TimeTableEditModal({
                             onChange={handleFormChange}
                             mode="edit"
                             selectOptions={selectOptions}
-                            // Example of passing specific lists if needed directly:
-                            // years={selectOptions.years}
-                            // sites={selectOptions.sites}
-                            // lecturers={selectOptions.lecturers}
                         />
                     ) : (
                        recordType && <Typography sx={{ color: 'error.main', textAlign: 'center', mt: 4 }}>Error: Form component not found for type "{recordType}".</Typography>
@@ -269,7 +221,6 @@ export default function TimeTableEditModal({
                     {!recordType && <Typography sx={{ color: 'text.secondary', textAlign: 'center', mt: 4 }}>Error: Record type not specified.</Typography>}
                 </Box>
                 <Stack direction="row" spacing={2} justifyContent="space-between" sx={{ mt: 3 }}>
-                    {/* Delete Button */}
                     {primaryKeyField && formData[primaryKeyField] && (
                         <MuiButton
                             variant="outlined" color="error" onClick={handleDeleteClick}
@@ -279,9 +230,7 @@ export default function TimeTableEditModal({
                             {isDeleting ? "Deleting..." : "Delete"}
                         </MuiButton>
                     )}
-                     {!primaryKeyField && <Box />} {/* Placeholder */}
-
-                    {/* Cancel & Update */}
+                     {!primaryKeyField && <Box />}
                     <Stack direction="row" spacing={2}>
                          <CustomButton variant="outlined" onClick={onClose} disabled={isLoading || isDeleting}>
                             Cancel
