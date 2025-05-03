@@ -1,89 +1,96 @@
-// src/components/forms/LecturerForm.jsx
+// src/components/modals/forms/LecturerForm.jsx
 
-import React, { useState, useEffect } from "react";
-import { TextField, Stack } from "@mui/material";
-import { getRecords } from "../../../utils/storage";
-import { handleSaveOrUpdateRecord } from "../../../handlers/formHandlers";
-import CustomButton from "../../UI/CustomButton";
+import React from "react";
+import {
+  TextField,
+  Stack,
+  Box,
+  Typography
+} from "@mui/material";
 
-export default function LecturerForm({ formData, onClose, onSave }) {
-  const [localForm, setLocalForm] = useState({
-    id: "",
-    name: "",
-  });
+// Simple presentation component for Lecturer data
+export default function LecturerForm({
+  formData = {},   // Current lecturer data (passed from parent modal)
+  errors = {},     // Validation errors (passed from parent modal)
+  onChange,      // Callback function to notify parent of changes
+  mode = "add",    // 'add' or 'edit'
+  // selectOptions prop is accepted for consistency
+  selectOptions = {}
+}) {
 
-  const [localErrors, setLocalErrors] = useState({});
-
-  useEffect(() => {
-    if (formData && formData.id) {
-      setLocalForm(formData); // Editing existing
-    } else {
-      generateNextLecturerId(); // Creating new
-    }
-  }, [formData]);
-
-  const generateNextLecturerId = () => {
-    const existingLecturers = getRecords("lecturers") || [];
-    const numbers = existingLecturers
-      .map((lec) => parseInt(lec.id?.replace("L", ""), 10))
-      .filter((n) => !isNaN(n));
-    const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
-    const nextId = `L${nextNumber}`;
-    setLocalForm((prev) => ({ ...prev, id: nextId }));
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    if (name === "id") return; // ID is never editable
-    setLocalForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-    setLocalErrors((prevErrors) => ({ ...prevErrors, [name]: undefined }));
-  };
-
-  const handleSubmit = async () => {
-    const existingLecturers = getRecords("lecturers") || [];
-    const actionType = formData?.id ? "edit" : "add";
-
-    // If ID is missing during add — generate it
-    if (!localForm.id && actionType === "add") {
-      const numbers = existingLecturers
-        .map((lec) => parseInt(lec.id?.replace("L", ""), 10))
-        .filter((n) => !isNaN(n));
-      const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
-      const nextId = `L${nextNumber}`;
-      localForm.id = nextId;
-    }
-
-    const { success, errors } = await handleSaveOrUpdateRecord(
-      "lecturers",
-      localForm,
-      actionType
-    );
-
-    if (!success) {
-      setLocalErrors(errors || {});
-      return;
-    }
-
-    if (onSave) onSave(localForm);
-    onClose?.();
-  };
+  // Helper function to get error message for a field
+  const getError = (fieldName) => errors[fieldName];
 
   return (
     <Stack spacing={3}>
-      <TextField
-        label="Lecturer Name"
-        name="name"
-        value={localForm.name}
-        onChange={handleChange}
-        error={!!localErrors.name}
-        helperText={localErrors.name}
-        fullWidth
-      />
+      {/* --- Lecturer Details --- */}
+      <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, position: 'relative' }}>
+        <Typography variant="overline" component="legend" sx={{ position: 'absolute', top: -10, left: 10, bgcolor: 'background.paper', px: 0.5 }}>
+          Lecturer Details
+        </Typography>
+        <Stack spacing={2} mt={1}>
+          {/* Lecturer Name */}
+          <TextField
+            label="Lecturer Name"
+            name="name"
+            value={formData.name || ""} // Controlled by formData prop
+            onChange={onChange} // Notify parent of change
+            error={!!getError('name')}
+            helperText={getError('name') || ' '} // Add space for consistent layout
+            fullWidth
+            required // Mark visually as required
+            autoFocus // Focus on this field when form opens
+            variant="outlined"
+            size="small" // Consistent size
+          />
 
-      <CustomButton onClick={handleSubmit}>Save Lecturer</CustomButton>
+          {/* Optional: Email */}
+          <TextField
+            label="Email (Optional)"
+            name="email"
+            type="email"
+            value={formData.email || ""}
+            onChange={onChange}
+            error={!!getError('email')}
+            helperText={getError('email') || ' '}
+            fullWidth
+            variant="outlined"
+            size="small"
+          />
+
+           {/* Optional: Phone */}
+           <TextField
+             label="Phone (Optional)"
+             name="phone"
+             type="tel"
+             value={formData.phone || ""}
+             onChange={onChange}
+             error={!!getError('phone')}
+             helperText={getError('phone') || ' '}
+             fullWidth
+             variant="outlined"
+             size="small"
+           />
+
+          {/* Lecturer ID Display (Read-only for context if editing, usually hidden) */}
+          {/* Avoid showing internal IDs unless necessary */}
+           {/* {mode === 'edit' && formData.id && (
+                <TextField
+                    label="Lecturer ID (Read Only)"
+                    value={formData.id}
+                    fullWidth
+                    disabled
+                    variant="outlined"
+                    size="small"
+                    InputProps={{ readOnly: true }}
+                    sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}
+                />
+           )} */}
+
+        </Stack>
+      </Box>
+
+      {/* NO SUBMIT BUTTON HERE - Parent modal handles submission */}
     </Stack>
   );
 }

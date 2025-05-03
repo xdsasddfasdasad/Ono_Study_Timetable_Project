@@ -1,3 +1,5 @@
+// /src/components/UI/PopupModaL.jsx
+
 import React from "react";
 import {
   Dialog,

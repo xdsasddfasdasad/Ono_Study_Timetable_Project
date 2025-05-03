@@ -1,6 +1,6 @@
 // src/context/EventsContext.js
-import React, { createContext, useState, useContext, useEffect } from 'react';
-// ודא שהנתיב ל-getStudentEvents ו-useAuth נכון
+
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { getStudentEvents } from '../utils/getStudentEvents';
 import { useAuth } from './AuthContext';
 
@@ -11,52 +11,57 @@ export const EventsProvider = ({ children }) => {
   const [studentEvents, setStudentEvents] = useState([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
 
-  useEffect(() => {
-    // נקה אירועים קודמים והגדר טעינה כשהמשתמש משתנה או מתנתק
-    setStudentEvents([]);
-    setIsLoadingEvents(true);
-
+  const fetchEvents = useCallback(() => {
     if (currentUser && currentUser.id) {
-      console.log(`EventsContext: טוען אירועים עבור סטודנט ID: ${currentUser.id}`);
+      console.log(`EventsContext: Fetching events for student ID: ${currentUser.id}`);
+      setIsLoadingEvents(true); // Set loading true *before* fetching
       try {
-          // קריאה לפונקציה לקבלת אירועים מסוננים למשתמש הנוכחי
-          const filteredEvents = getStudentEvents(currentUser.id);
-          setStudentEvents(filteredEvents);
-          console.log(`EventsContext: נטענו ${filteredEvents.length} אירועים.`);
+        const filteredEvents = getStudentEvents(currentUser.id);
+        setStudentEvents(filteredEvents);
+        console.log(`EventsContext: Fetched ${filteredEvents.length} events.`);
       } catch (error) {
-          console.error("שגיאה בטעינה או עיבוד אירועי סטודנט:", error);
-          // השאר את מערך האירועים ריק במקרה של שגיאה
+        console.error("Error fetching student events:", error);
+        setStudentEvents([]); // Clear events on error
       } finally {
-          // תמיד הסר את מצב הטעינה בסיום
-          setIsLoadingEvents(false);
+        setIsLoadingEvents(false); // Set loading false *after* fetching/error
       }
-
     } else {
-      // אין משתמש מחובר, ודא שהאירועים ריקים ומצב הטעינה שקרי
-      setIsLoadingEvents(false);
-      console.log("EventsContext: אין משתמש מחובר, האירועים נוקו.");
+      // No user or user logged out
+      setStudentEvents([]);
+      setIsLoadingEvents(false); // Ensure loading is false if no user
+      console.log("EventsContext: No user logged in, events cleared.");
     }
-    // הרץ אפקט זה מחדש אם currentUser משתנה (לוגין/לוגאאוט)
-  }, [currentUser]);
+  }, [currentUser]); // Dependency: re-create fetchEvents if currentUser changes
 
-  // הערך שיועבר לקומפוננטות שיצרכו את הקונטקסט
-  const value = {
-    studentEvents,
-    isLoadingEvents,
-  };
 
-  return (
-    <EventsContext.Provider value={value}>
-      {children}
-    </EventsContext.Provider>
-  );
-}; // סיום הקומפוננטה EventsProvider
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]); 
 
-// Custom hook to use the events context
+const refreshStudentEvents = () => {
+  console.log("EventsContext: Manual refresh triggered.");
+  fetchEvents(); // Simply call the memoized fetch function
+};
+
+// Value provided by the context
+const value = {
+  studentEvents,
+  isLoadingEvents,
+  refreshStudentEvents, // ✅ Expose the refresh function
+};
+
+return (
+  <EventsContext.Provider value={value}>
+    {children}
+  </EventsContext.Provider>
+);
+};
+
+// Custom hook remains the same
 export const useEvents = () => {
-  const context = useContext(EventsContext);
-  if (context === undefined) {
-    throw new Error('useEvents must be used within an EventsProvider');
-  }
-  return context;
-}; // סיום ה-hook useEvents
+const context = useContext(EventsContext);
+if (context === undefined) {
+  throw new Error('useEvents must be used within an EventsProvider');
+}
+return context;
+};

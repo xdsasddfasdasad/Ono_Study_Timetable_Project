@@ -1,128 +1,117 @@
 // src/components/modals/forms/RoomForm.jsx
 
-import React, { useState, useEffect } from "react";
-import { TextField, Stack, FormControl, InputLabel, MenuItem, Select, Typography } from "@mui/material";
-import { getRecords } from "../../../utils/storage";
+import React from "react";
+import {
+  TextField,
+  Stack,
+  Box,
+  Typography,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormHelperText
+} from "@mui/material";
 
-export default function RoomForm({ formData = {}, errors = {}, onChange, mode = "add", options = {} }) {
-  const [availableSites, setAvailableSites] = useState([]);
-  const [availableRooms, setAvailableRooms] = useState([]);
-  const [selectedSiteCode, setSelectedSiteCode] = useState("");
-  const [selectedRoomCode, setSelectedRoomCode] = useState("");
+// Simple presentation component for Room data
+export default function RoomForm({
+  formData = {},         // Current room data (passed from parent modal)
+  errors = {},           // Validation errors (passed from parent modal)
+  onChange,            // Callback function to notify parent of changes
+  mode = "add",          // 'add' or 'edit'
+  selectOptions = { sites: [] } // Available sites (passed from parent modal)
+}) {
 
-  useEffect(() => {
-    const sites = options.sites || getRecords("sites") || [];
-    setAvailableSites(sites);
+  // Helper function to get error message for a field
+  const getError = (fieldName) => errors[fieldName];
 
-    if (mode === "edit" && formData.siteCode) {
-      setSelectedSiteCode(formData.siteCode);
-    }
-  }, [options.sites, mode, formData.siteCode]);
-
-  useEffect(() => {
-    const site = availableSites.find((s) => s.siteCode === selectedSiteCode);
-    setAvailableRooms(site?.rooms || []);
-  }, [selectedSiteCode, availableSites]);
-
-  useEffect(() => {
-    if (mode === "edit" && formData.roomCode) {
-      setSelectedRoomCode(formData.roomCode);
-    }
-  }, [formData.roomCode, mode]);
-
-  useEffect(() => {
-    if (mode === "add" && !formData.roomCode) {
-      const allRooms = availableSites.flatMap((site) => site.rooms || []);
-      const nextNum = Math.max(0, ...allRooms.map(r => parseInt(r.roomCode?.replace("R", "") || "0", 10))) + 1;
-      const nextRoomCode = `R${nextNum}`;
-      onChange({ target: { name: "roomCode", value: nextRoomCode } });
-    }
-  }, [availableSites, formData.roomCode, mode, onChange]);
-
-  const handleSiteChange = (e) => {
-    const value = e.target.value;
-    setSelectedSiteCode(value);
-    setSelectedRoomCode("");
-    onChange({ target: { name: "siteCode", value } });
-  };
-
-  const handleRoomSelect = (e) => {
-    const value = e.target.value;
-    setSelectedRoomCode(value);
-    const selectedRoom = availableRooms.find((r) => r.roomCode === value);
-    if (selectedRoom) {
-      onChange({ target: { name: "roomCode", value: selectedRoom.roomCode } });
-      onChange({ target: { name: "roomName", value: selectedRoom.roomName || "" } });
-      onChange({ target: { name: "notes", value: selectedRoom.notes || "" } });
-    }
-  };
+  // Extract the list of sites from selectOptions
+  // Ensure it's always an array
+  const siteOptions = Array.isArray(selectOptions?.sites) ? selectOptions.sites : [];
 
   return (
-    <Stack spacing={2}>
-      {errors.general && (
-        <Typography color="error" variant="body2">
-          {errors.general}
+    <Stack spacing={3}>
+      {/* --- Room Information --- */}
+      <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, position: 'relative' }}>
+        <Typography variant="overline" component="legend" sx={{ position: 'absolute', top: -10, left: 10, bgcolor: 'background.paper', px: 0.5 }}>
+          Room Information
         </Typography>
-      )}
-      {/* Site Selection */}
-      <FormControl fullWidth error={!!errors.siteCode}>
-        <InputLabel>Site</InputLabel>
-        <Select
-          value={selectedSiteCode}
-          onChange={handleSiteChange}
-          disabled={mode === "edit"}
-          label="Site"
-        >
-          {availableSites.map((site) => (
-            <MenuItem key={site.siteCode} value={site.siteCode}>
-              {site.siteName}
-            </MenuItem>
-          ))}
-        </Select>
-        {errors.siteCode && <Typography color="error" variant="caption">{errors.siteCode}</Typography>}
-      </FormControl>
+        <Stack spacing={2} mt={1}>
 
-      {/* Room Selection (Edit only) */}
-      {mode === "edit" && (
-        <FormControl fullWidth error={!!errors.roomCode}>
-          <InputLabel>Room</InputLabel>
-          <Select
-            value={selectedRoomCode}
-            onChange={handleRoomSelect}
-            label="Room"
-          >
-            {availableRooms.map((room) => (
-              <MenuItem key={room.roomCode} value={room.roomCode}>
-                {room.roomName} ({room.roomCode})
-              </MenuItem>
-            ))}
-          </Select>
-          {errors.roomCode && <Typography color="error" variant="caption">{errors.roomCode}</Typography>}
-        </FormControl>
-      )}
-      {/* Room Name */}
-      <TextField
-        label="Room Name"
-        name="roomName"
-        value={formData.roomName || ""}
-        onChange={onChange}
-        error={!!errors.roomName}
-        helperText={errors.roomName}
-        fullWidth
-      />
+          {/* Parent Site Selection */}
+          <FormControl fullWidth error={!!getError('siteCode')} required size="small">
+            <InputLabel id="room-site-select-label">Parent Site</InputLabel>
+            <Select
+              labelId="room-site-select-label"
+              name="siteCode" // Ensure name matches formData key
+              value={formData.siteCode || ""} // Controlled by formData prop
+              onChange={onChange} // Notify parent of change
+              label="Parent Site"
+              // Disable changing the parent site when editing an existing room
+              disabled={mode === 'edit'}
+            >
+              <MenuItem value="" disabled><em>Select site...</em></MenuItem>
+              {siteOptions.length > 0 ? (
+                siteOptions.map((site) => (
+                  // Use site.value and site.label as defined in the modal's selectOptions creation
+                  <MenuItem key={site.value} value={site.value}>
+                    {site.label}
+                  </MenuItem>
+                ))
+              ) : (
+                <MenuItem value="" disabled>No sites available</MenuItem>
+              )}
+            </Select>
+            {getError('siteCode') && <FormHelperText>{getError('siteCode')}</FormHelperText>}
+          </FormControl>
 
-      {/* Notes */}
-      <TextField
-        label="Notes"
-        name="notes"
-        value={formData.notes || ""}
-        onChange={onChange}
-        error={!!errors.notes}
-        helperText={errors.notes}
-        fullWidth
-        multiline
-        minRows={2}
-      />
+          {/* Room Name */}
+          <TextField
+            label="Room Name"
+            name="roomName"
+            value={formData.roomName || ""} // Controlled by formData prop
+            onChange={onChange} // Notify parent of change
+            error={!!getError('roomName')}
+            helperText={getError('roomName') || ' '}
+            fullWidth
+            required
+            variant="outlined"
+            size="small"
+          />
+
+          {/* Room Code Display (Read-only for context if editing, hidden otherwise) */}
+          {/* Avoid showing internal codes unless necessary */}
+           {/* {mode === 'edit' && formData.roomCode && (
+                <TextField
+                    label="Room Code (Read Only)"
+                    value={formData.roomCode}
+                    fullWidth
+                    disabled
+                    variant="outlined"
+                    size="small"
+                    InputProps={{ readOnly: true }}
+                    sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}
+                />
+           )} */}
+
+          {/* Notes */}
+          <TextField
+            label="Notes"
+            name="notes"
+            value={formData.notes || ""} // Controlled by formData prop
+            onChange={onChange} // Notify parent of change
+            error={!!getError('notes')}
+            helperText={getError('notes') || ' '}
+            fullWidth
+            multiline
+            rows={3} // Adjust rows as needed
+            variant="outlined"
+            size="small"
+          />
+
+        </Stack>
+      </Box>
+      {/* NO SUBMIT BUTTON HERE */}
     </Stack>
   );
 }
