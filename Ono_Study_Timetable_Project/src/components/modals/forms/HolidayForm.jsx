@@ -18,7 +18,6 @@ export default function EventForm({
   selectOptions = {}
 }) {
 
-d
   const getError = (fieldName) => errors[fieldName];
   const isAllDay = formData.allDay === true || String(formData.allDay).toLowerCase() === 'true';
 
