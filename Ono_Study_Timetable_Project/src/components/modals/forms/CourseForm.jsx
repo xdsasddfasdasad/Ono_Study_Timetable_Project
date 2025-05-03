@@ -1,81 +1,193 @@
+// src/components/modals/forms/CourseForm.jsx
+
 import React from "react";
 import {
-  TextField,
-  Stack,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Typography,
+  TextField, Stack, Box, Typography, FormControl, InputLabel, Select,
+  MenuItem, FormHelperText, Grid, IconButton, Button as MuiButton // Added MuiButton
 } from "@mui/material";
-import { validateCourseForm } from "../../../utils/validateForm";
-import { saveRecord } from "../../../utils/storage";
-import CustomButton from "../../UI/CustomButton";
+import { AddCircleOutline, RemoveCircleOutline } from '@mui/icons-material';
 
-export default function CourseForm({ formData, onChange, errors, onClose, onSave, options }) {
-  const handleSubmit = () => {
-    const validationErrors = validateCourseForm(formData);
-    if (Object.keys(validationErrors).length > 0) {
-      if (onChange) onChange({ target: { name: "errors", value: validationErrors } });
-      return;
+// Days of the week for selection
+const daysOfWeek = [
+  { value: 'Sun', label: 'Sunday' }, { value: 'Mon', label: 'Monday' },
+  { value: 'Tue', label: 'Tuesday' }, { value: 'Wed', label: 'Wednesday' },
+  { value: 'Thu', label: 'Thursday' }, { value: 'Fri', label: 'Friday' },
+  { value: 'Sat', label: 'Saturday' },
+];
+
+// Presentation Component for Course Definition
+export default function CourseForm({
+  formData = { hours: [{ day: '', start: '', end: '' }] },
+  errors = {},
+  onChange,
+  mode = "add", // 'add' or 'edit'
+  // Expecting semesters, lecturers, rooms (formatted from parent)
+  selectOptions = { semesters: [], lecturers: [], rooms: [] }
+}) {
+
+  const getError = (fieldName, index = null) => {
+    const key = index !== null ? `hours[${index}].${fieldName}` : fieldName;
+    return errors[key];
+  };
+
+  const semesterOptions = selectOptions?.semesters || [];
+  const lecturerOptions = selectOptions?.lecturers || [];
+  const roomOptions = selectOptions?.rooms || [];
+
+  // Handler specifically for changes within the 'hours' array
+  const handleHourChange = (index, field, value) => {
+    // Create a deep copy to avoid direct state mutation issues
+    const newHours = JSON.parse(JSON.stringify(formData.hours || []));
+    if (!newHours[index]) newHours[index] = {}; // Ensure slot exists
+    newHours[index][field] = value;
+    // Trigger the main onChange, passing the modified hours array
+    // Crucially using event.target structure expected by the parent modal's handler
+    onChange({ target: { name: 'hours', value: newHours } });
+  };
+
+  const addHourSlot = () => {
+    const newHours = [...(formData.hours || []), { day: '', start: '', end: '' }];
+    onChange({ target: { name: 'hours', value: newHours } });
+  };
+
+  const removeHourSlot = (index) => {
+    const newHours = (formData.hours || []).filter((_, i) => i !== index);
+    // Ensure at least one slot remains if required
+    if (newHours.length === 0) {
+        newHours.push({ day: '', start: '', end: '' }); // Add back an empty one if needed
     }
-
-    // ✅ Save directly to localStorage
-    saveRecord("courses", formData);
-
-    // Optional external handler
-    if (onSave) onSave(formData);
-
-    onClose?.();
+    onChange({ target: { name: 'hours', value: newHours } });
   };
 
   return (
-    <Stack spacing={2}>
-      <TextField
-        label="Course Name"
-        name="courseName"
-        value={formData.courseName}
-        onChange={onChange}
-        error={!!errors.courseName}
-        helperText={errors.courseName}
-        fullWidth
-      />
+    <Stack spacing={3}>
+      {/* --- Course Core Details --- */}
+      <Box sx={boxStyle}>
+        <Typography variant="overline" component="legend" sx={legendStyle}>
+          Course Details
+        </Typography>
+        <Grid container spacing={2} mt={0.5}>
+           <Grid item xs={12} sm={6}>
+                <TextField label="Course Code" name="courseCode" value={formData.courseCode || ""} onChange={onChange}
+                    error={!!getError('courseCode')} helperText={getError('courseCode') || ' '}
+                    fullWidth required disabled={mode === 'edit'} variant="outlined" size="small"
+                    InputProps={{ readOnly: mode === 'edit' }}
+                />
+           </Grid>
+           <Grid item xs={12} sm={6}>
+                <TextField label="Course Name" name="courseName" value={formData.courseName || ""} onChange={onChange}
+                    error={!!getError('courseName')} helperText={getError('courseName') || ' '}
+                    fullWidth required autoFocus={mode === 'add'} variant="outlined" size="small"
+                />
+           </Grid>
+            {/* ✅ Semester Selection */}
+            <Grid item xs={12} sm={6}>
+                 <FormControl fullWidth error={!!getError('semesterCode')} required size="small">
+                     <InputLabel id="course-semester-select-label">Semester</InputLabel>
+                     <Select labelId="course-semester-select-label" name="semesterCode" value={formData.semesterCode || ""} onChange={onChange} label="Semester">
+                         <MenuItem value="" disabled><em>Select semester...</em></MenuItem>
+                         {semesterOptions.map(opt => (<MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>))}
+                         {semesterOptions.length === 0 && <MenuItem value="" disabled>No semesters available</MenuItem>}
+                     </Select>
+                     {getError('semesterCode') && <FormHelperText>{getError('semesterCode')}</FormHelperText>}
+                 </FormControl>
+            </Grid>
+            {/* ✅ Lecturer Selection */}
+           <Grid item xs={12} sm={6}>
+                 <FormControl fullWidth error={!!getError('lecturerId')} required size="small">
+                     <InputLabel id="course-lecturer-select-label">Lecturer</InputLabel>
+                     <Select labelId="course-lecturer-select-label" name="lecturerId" value={formData.lecturerId || ""} onChange={onChange} label="Lecturer">
+                          <MenuItem value="" disabled><em>Select lecturer...</em></MenuItem>
+                         {lecturerOptions.map(opt => (<MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>))}
+                         {lecturerOptions.length === 0 && <MenuItem value="" disabled>No lecturers available</MenuItem>}
+                     </Select>
+                     {getError('lecturerId') && <FormHelperText>{getError('lecturerId')}</FormHelperText>}
+                 </FormControl>
+            </Grid>
+            {/* ✅ Room Selection */}
+            <Grid item xs={12} sm={6}>
+                 <FormControl fullWidth error={!!getError('roomCode')} size="small">
+                     <InputLabel id="course-room-select-label">Default Room (Optional)</InputLabel>
+                     <Select labelId="course-room-select-label" name="roomCode" value={formData.roomCode || ""} onChange={onChange} label="Default Room (Optional)">
+                         <MenuItem value=""><em>None / Varies</em></MenuItem>
+                         {roomOptions.map(opt => (<MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>))}
+                         {roomOptions.length === 0 && <MenuItem value="" disabled>No rooms available</MenuItem>}
+                     </Select>
+                     {getError('roomCode') && <FormHelperText>{getError('roomCode')}</FormHelperText>}
+                 </FormControl>
+            </Grid>
+             {/* ✅ Zoom Link */}
+             <Grid item xs={12} sm={6}>
+                 <TextField label="Zoom Link (Optional)" name="zoomMeetinglink" type="url" value={formData.zoomMeetinglink || ""} onChange={onChange}
+                    error={!!getError('zoomMeetinglink')} helperText={getError('zoomMeetinglink') || ' '}
+                    fullWidth variant="outlined" size="small"
+                 />
+            </Grid>
+            {/* ✅ Notes */}
+            <Grid item xs={12}>
+                <TextField label="Course Notes (Optional)" name="notes" value={formData.notes || ""} onChange={onChange}
+                   error={!!getError('notes')} helperText={getError('notes') || ' '}
+                   fullWidth multiline rows={2} variant="outlined" size="small"
+                />
+           </Grid>
+        </Grid>
+      </Box>
 
-      <FormControl fullWidth error={!!errors.lecturerId}>
-        <InputLabel>Lecturer</InputLabel>
-        <Select
-          name="lecturerId"
-          value={formData.lecturerId}
-          onChange={onChange}
-          label="Lecturer"
-        >
-          {options?.lecturers?.map((lec) => (
-            <MenuItem key={lec.id} value={lec.id}>
-              {lec.name}
-            </MenuItem>
-          ))}
-        </Select>
-        {errors.lecturerId && <Typography color="error">{errors.lecturerId}</Typography>}
-      </FormControl>
-
-      <FormControl fullWidth error={!!errors.semesterCode}>
-        <InputLabel>Semester</InputLabel>
-        <Select
-          name="semesterCode"
-          value={formData.semesterCode}
-          onChange={onChange}
-          label="Semester"
-        >
-          {options?.semesters?.map((sem) => (
-            <MenuItem key={sem.code} value={sem.code}>
-              {sem.name}
-            </MenuItem>
-          ))}
-        </Select>
-        {errors.semesterCode && <Typography color="error">{errors.semesterCode}</Typography>}
-      </FormControl>
-
-      <CustomButton onClick={handleSubmit}>Save Course</CustomButton>
+      {/* --- ✅ Weekly Hours Section --- */}
+      <Box sx={boxStyle}>
+        <Typography variant="overline" component="legend" sx={legendStyle}>
+          Weekly Schedule Slots *
+        </Typography>
+        {/* Display general hours error if present */}
+        {getError('hours') && <Alert severity="error" sx={{ mt: 1, mb: 1 }} size="small">{getError('hours')}</Alert>}
+        <Stack spacing={1.5} mt={1}>
+            {(formData.hours || []).map((hourSlot, index) => (
+                 <Grid container spacing={1} key={index} alignItems="center">
+                     {/* Day Select */}
+                    <Grid item xs={12} sm={4} md={3}>
+                         <FormControl fullWidth error={!!getError('day', index)} size="small" required>
+                             <InputLabel id={`hour-day-label-${index}`} shrink={!!hourSlot.day}>Day</InputLabel>
+                             <Select labelId={`hour-day-label-${index}`} label="Day" name="day" value={hourSlot.day || ""} onChange={(e) => handleHourChange(index, 'day', e.target.value)} >
+                                 <MenuItem value="" disabled><em>Select Day</em></MenuItem>
+                                 {daysOfWeek.map(d => (<MenuItem key={d.value} value={d.value}>{d.label}</MenuItem>))}
+                             </Select>
+                              {getError('day', index) && <FormHelperText>{getError('day', index)}</FormHelperText>}
+                         </FormControl>
+                    </Grid>
+                     {/* Start Time */}
+                    <Grid item xs={6} sm={3.5} md={3}>
+                         <TextField label="Start" name="start" type="time" value={hourSlot.start || ""} onChange={(e) => handleHourChange(index, 'start', e.target.value)}
+                            error={!!getError('start', index)} helperText={getError('start', index) || ' '}
+                            fullWidth required variant="outlined" size="small" InputLabelProps={{ shrink: true }} inputProps={{ step: 300 }}
+                         />
+                    </Grid>
+                    {/* End Time */}
+                    <Grid item xs={6} sm={3.5} md={3}>
+                        <TextField label="End" name="end" type="time" value={hourSlot.end || ""} onChange={(e) => handleHourChange(index, 'end', e.target.value)}
+                            error={!!getError('end', index)} helperText={getError('end', index) || ' '}
+                            fullWidth required variant="outlined" size="small" InputLabelProps={{ shrink: true }} inputProps={{ step: 300 }}
+                         />
+                    </Grid>
+                    {/* Remove Button */}
+                     <Grid item xs={12} sm={1} md={3} sx={{ textAlign: { xs: 'right', md: 'left'} }}>
+                         <IconButton onClick={() => removeHourSlot(index)} color="error" size="small" aria-label={`remove slot ${index + 1}`} disabled={(formData.hours || []).length <= 1} title="Remove Time Slot">
+                             <RemoveCircleOutline />
+                         </IconButton>
+                    </Grid>
+                 </Grid>
+            ))}
+            {/* Add Button */}
+             <Box sx={{ mt: 1 }}>
+                 <MuiButton startIcon={<AddCircleOutline />} onClick={addHourSlot} size="small">
+                     Add Time Slot
+                 </MuiButton>
+             </Box>
+        </Stack>
+      </Box>
     </Stack>
   );
 }
+
+// Shared styles
+const boxStyle = { border: 1, borderColor: 'divider', borderRadius: 1, p: 2, position: 'relative' };
+const legendStyle = { position: 'absolute', top: -10, left: 10, bgcolor: 'background.paper', px: 0.5 };

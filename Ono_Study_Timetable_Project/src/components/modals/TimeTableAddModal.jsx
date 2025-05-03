@@ -5,13 +5,7 @@ import {
 import PopupModal from "../UI/PopupModal";
 import FormWrapper from "../UI/FormWrapper";
 import CustomButton from "../UI/CustomButton";
-
-// Import Helpers
-import {
-  recordTypeLabels,
-  getEntityKeyByRecordType,
-  generateInitialFormData
-} from "../../utils/formMappings"; // Adjust path
+import { recordTypeLabels, getEntityKeyByRecordType, generateInitialFormData } from "../../utils/formMappings";
 
 // Import Handlers and Storage
 import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers";
@@ -21,7 +15,6 @@ import { getRecords } from "../../utils/storage";
 import YearForm from "./forms/YearForm";
 import SemesterForm from "./forms/SemesterForm";
 import LecturerForm from "./forms/LecturerForm";
-import CourseForm from "./forms/CourseForm"; // Likely not used directly here anymore
 import CourseMeetingForm from "./forms/CourseMeetingForm"; // Use alias
 import TaskForm from "./forms/TaskForm";
 import SiteForm from "./forms/SiteForm";
@@ -35,7 +28,6 @@ const formComponentMap = {
   year: YearForm,
   semester: SemesterForm,
   lecturer: LecturerForm,
-  // course: CourseForm, // Definition handled by dedicated modal
   courseMeeting: CourseMeetingForm,
   task: TaskForm,
   site: SiteForm,
@@ -44,6 +36,12 @@ const formComponentMap = {
   vacation: VacationForm,
   event: EventForm,
 };
+const addableRecordTypeLabels = Object.entries(recordTypeLabels)
+    .filter(([key]) => key in formComponentMap) // Only show types with a mapped form component
+    .reduce((acc, [key, label]) => {
+        acc[key] = label;
+        return acc;
+    }, {});
 
 // --- Main Component ---
 export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }) {

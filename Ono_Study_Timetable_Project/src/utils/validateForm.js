@@ -209,37 +209,87 @@ return errors;
 };
 
 export const validateCourseForm = (formData, existingCourses = [], extra = {}) => {
+  console.log("[validateCourseForm] Validating:", formData);
   const errors = {};
   const editingId = extra.editingId; // courseCode
 
+  // --- Core Course Details Validation ---
   if (!formData.courseCode?.trim()) {
       errors.courseCode = "Course code is required.";
   } else if (isDuplicate(existingCourses, formData, 'courseCode', 'courseCode', editingId)) {
-       errors.courseCode = "Course code already exists.";
+      errors.courseCode = "Course code already exists.";
   }
 
   if (!formData.courseName?.trim()) errors.courseName = "Course name is required.";
   if (!formData.lecturerId?.trim()) errors.lecturerId = "Lecturer is required.";
   if (!formData.semesterCode?.trim()) errors.semesterCode = "Semester is required.";
-  // Add checks for existence of lecturerId, semesterCode if needed (requires more 'extra' data)
-  // Add basic validation for hours array if form handles it (e.g., at least one entry)
+  // Optional: Add checks for existence of lecturerId, semesterCode using 'extra' if needed
+
+  // --- Weekly Hours (formData.hours) Validation ---
   if (!Array.isArray(formData.hours) || formData.hours.length === 0) {
-     // errors.hours = "At least one time slot is required."; // Or handle in specific course modal
+      // You might want a general error or an error associated with the 'Add Time Slot' button area
+      errors.hours = "At least one weekly time slot is required.";
   } else {
-      // Basic check within hours
+      const daysUsed = new Set(); // To check for duplicate days if needed
+
       formData.hours.forEach((slot, index) => {
-           if (!slot.day) errors[`hours[${index}].day`] = "Day is required.";
-           if (!slot.start) errors[`hours[${index}].start`] = "Start time is required.";
-           if (!slot.end) errors[`hours[${index}].end`] = "End time is required.";
-           if (slot.start && slot.end && slot.start >= slot.end) {
-                errors[`hours[${index}].end`] = "End time must be after start time.";
+          let slotHasError = false; // Flag to avoid cascading time errors
+
+          // Check required fields for each slot
+          if (!slot?.day) {
+              errors[`hours[${index}].day`] = "Day is required.";
+              slotHasError = true;
+          }
+          if (!slot?.start) {
+               errors[`hours[${index}].start`] = "Start time is required.";
+               slotHasError = true;
+          }
+          if (!slot?.end) {
+               errors[`hours[${index}].end`] = "End time is required.";
+               slotHasError = true;
+          }
+
+          // Check time validity only if both times exist and no other field error in this slot
+          if (slot?.start && slot?.end && !slotHasError) {
+              if (slot.start >= slot.end) {
+                   errors[`hours[${index}].end`] = "End time must be after start time.";
+                   slotHasError = true; // Mark error for this slot
+              }
+          }
+
+          // Optional: Check for duplicate days (Uncomment if a course can only meet once per day type)
+          if (slot?.day && !slotHasError) {
+              if (daysUsed.has(slot.day)) {
+                  errors[`hours[${index}].day`] = `Day '${slot.day}' is already scheduled for this course.`;
+                  slotHasError = true;
+              } else {
+                  daysUsed.add(slot.day);
+              }
+          }
+
+           // Optional: Check for time overlaps on the same day (more complex)
+           // Would require iterating through other slots on the same day and comparing start/end times.
+           // Example placeholder:
+           if (slot?.day && slot?.start && slot?.end && !slotHasError) {
+               const overlap = formData.hours.some((otherSlot, otherIndex) => {
+                    if (index === otherIndex || otherSlot.day !== slot.day || !otherSlot.start || !otherSlot.end) {
+                         return false; // Skip self, different days, or incomplete slots
+                    }
+                    // Check for overlap: (StartA < EndB) and (EndA > StartB)
+                    return slot.start < otherSlot.end && slot.end > otherSlot.start;
+               });
+               if (overlap) {
+                    errors[`hours[${index}].start`] = "Time slot overlaps with another slot on the same day.";
+                    errors[`hours[${index}].end`] = "Time slot overlaps with another slot on the same day.";
+               }
            }
-      });
-  }
 
+      }); // end forEach slot
+  } // end else (if hours array is not empty)
 
+  console.log("[validateCourseForm] Validation Errors:", errors);
   return errors;
-};
+}; // End of validateCourseForm
 
 // ✅ ADDED: Validation for a single Course Meeting
 export const validateCourseMeetingForm = (formData, existingMeetings = [], extra = {}) => {
