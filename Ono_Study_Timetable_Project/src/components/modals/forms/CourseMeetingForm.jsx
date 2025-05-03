@@ -65,7 +65,6 @@ export default function CourseMeetingForm({
                     labelId="meeting-course-select-label"
                     name="courseCode"
                     value={formData.courseCode || ""}
-                    // ✅ Use the dedicated handler for course selection
                     onChange={handleCourseChange}
                     label="Associated Course"
                 >
@@ -98,6 +97,13 @@ export default function CourseMeetingForm({
               </Select>
               {getError('roomCode') && <FormHelperText>{getError('roomCode')}</FormHelperText>}
            </FormControl>
+           <TextField label="Zoom Meeting Link (Optional)" name="zoomMeetinglink" value={formData.zoomMeetinglink || ""} onChange={onChange} error={!!getError('zoomMeetinglink')}
+                     helperText={getError('zoomMeetinglink') || ' '}
+                     fullWidth
+                     variant="outlined"
+                     size="small"
+                     type="url"
+                 />
            {/* Notes */}
            <TextField label="Notes for this specific meeting (Optional)" name="notes" /* ... */ value={formData.notes || ""} onChange={onChange} error={!!getError('notes')} helperText={getError('notes') || ' '} multiline rows={2} size="small" />
         </Stack>

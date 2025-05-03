@@ -21,50 +21,76 @@ const isDuplicate = (data, formData, checkField, idField, editingId) => {
 // --- Specific Validation Functions (Updated with uniqueness) ---
 
 export const validateStudentForm = (formData, existingStudents = [], options = {}) => {
-const errors = {};
-const editingId = options.editingId; // Assumes handler passes this in options
+  console.log("[validateStudentForm] Validating:", formData);
+  console.log("[validateStudentForm] Options:", options);
+  const errors = {};
+  const editingId = options.editingId; // ID of the student being edited, null if adding
+  const isEditMode = !!editingId;
 
-// ID Checks
-if (!formData.id?.trim()) {
-  errors.id = "ID is required.";
-} else if (isDuplicate(existingStudents, formData, 'id', 'id', editingId)) {
-   errors.id = "ID already exists.";
-}
+  // --- ID Validation ---
+  // Required (especially in Add), must be unique
+  if (!formData.id?.trim()) {
+      errors.id = "Student ID is required.";
+  } else if (isDuplicate(existingStudents, formData, 'id', 'id', editingId)) {
+      errors.id = "Student ID already exists.";
+  }
+  // Optional: Add format validation for ID if needed (e.g., must be numeric)
+  // else if (!/^\d+$/.test(formData.id.trim())) { errors.id = "ID must be numeric."; }
 
-// Username Checks
-if (!formData.username?.trim()) {
-  errors.username = "Username is required.";
-} else if (formData.username.length < 6) {
-  errors.username = "Username must be at least 6 characters.";
-} else if (isDuplicate(existingStudents, formData, 'username', 'id', editingId)) {
-   errors.username = "Username already exists.";
-}
+  // --- Name Validation ---
+  if (!formData.firstName?.trim()) errors.firstName = "First name is required.";
+  if (!formData.lastName?.trim()) errors.lastName = "Last name is required.";
 
-// Other fields...
-if (!formData.firstName?.trim()) errors.firstName = "First name is required.";
-if (!formData.lastName?.trim()) errors.lastName = "Last name is required.";
-if (!formData.email?.trim()) {
-  errors.email = "Email is required.";
-} else if (!/^\S+@\S+\.\S+$/.test(formData.email)) {
-  errors.email = "Invalid email address.";
-} else if (isDuplicate(existingStudents, formData, 'email', 'id', editingId)) {
-     errors.email = "Email already exists.";
-}
+  // --- Email Validation ---
+  if (!formData.email?.trim()) {
+      errors.email = "Email is required.";
+  } else if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) { // Added trim()
+      errors.email = "Invalid email address format.";
+  } else if (isDuplicate(existingStudents, formData, 'email', 'id', editingId)) {
+      errors.email = "Email address already in use.";
+  }
 
-// Password Checks
-// Check password only if adding or if password field is filled during edit
-const isAdding = !editingId;
-const passwordProvided = !!formData.password?.trim();
-if (!options?.skipPassword && (isAdding || passwordProvided)) {
-    if (!formData.password?.trim()) errors.password = "Password is required.";
-    else if (formData.password.length < 6) errors.password = "Password must be at least 6 characters.";
-    // Confirmation check only needed if password is provided
-    if(passwordProvided) {
-        if (!formData.confirmPassword?.trim()) errors.confirmPassword = "Please confirm your password.";
-        else if (formData.password !== formData.confirmPassword) errors.confirmPassword = "Passwords do not match.";
-    }
-}
-return errors;
+  // --- Username Validation ---
+  if (!formData.username?.trim()) {
+      errors.username = "Username is required.";
+  } else if (formData.username.trim().length < 6) {
+      errors.username = "Username must be at least 6 characters.";
+  } else if (isDuplicate(existingStudents, formData, 'username', 'id', editingId)) {
+      errors.username = "Username already exists.";
+  }
+
+  // --- Phone Validation (Optional) ---
+  if (formData.phone && formData.phone.trim()) { // Validate only if provided
+      // Add specific phone format validation if needed
+      // Example: if (!/^\d{10}$/.test(formData.phone.trim())) errors.phone = "Invalid phone number format (e.g., 10 digits)."
+  }
+
+  // --- Password Validation ---
+  // Check passwords only if NOT explicitly skipping (i.e., adding, or editing AND providing a new password)
+  if (!options?.skipPassword) {
+      // Password Field
+      if (!formData.password) { // Check existence first
+          errors.password = "Password is required.";
+      } else if (formData.password.length < 6) {
+          errors.password = "Password must be at least 6 characters.";
+      }
+
+      // Confirm Password Field (Only if password seems okay so far)
+      if (!errors.password) { // Only validate confirm if password field itself passed basic checks
+          if (!formData.confirmPassword) { // Check existence of confirmPassword
+               // This check is crucial - ensure the field exists AND has value
+              errors.confirmPassword = "Please confirm your password.";
+          } else if (formData.password !== formData.confirmPassword) {
+               // Comparison happens only if confirmPassword was provided
+              errors.confirmPassword = "Passwords do not match.";
+          }
+      }
+  } else {
+       console.log("[validateStudentForm] Skipping password validation as requested.");
+  }
+
+  console.log("[validateStudentForm] Validation Errors:", errors);
+  return errors;
 };
 
 export const validateYearForm = (formData, existingYears = [], extra = {}) => {

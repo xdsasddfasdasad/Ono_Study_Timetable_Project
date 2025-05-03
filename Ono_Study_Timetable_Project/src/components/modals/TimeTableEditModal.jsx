@@ -125,14 +125,22 @@ export default function TimeTableEditModal({
     // --- Handlers ---
     const handleFormChange = useCallback((event) => {
         const { name, value, type, checked } = event.target;
-        const val = type === 'checkbox' ? checked : value;
-        setFormData((prev) => ({ ...prev, [name]: val }));
-        if (errors[name]) setErrors((prev) => ({ ...prev, [name]: undefined }));
+        const newValue = type === 'checkbox' ? checked : value;
+    
+        setFormData((prev) => {
+             const updatedData = { ...prev, [name]: newValue };
+             if (name === 'allDay' && newValue === true) {
+                 updatedData.startHour = '';
+                 updatedData.endHour = '';
+             }
+            return updatedData;
+        });
+    
+        if (errors[name]) { setErrors((prev) => ({ ...prev, [name]: undefined })); }
         setGeneralError("");
     }, [errors]);
 
     const handleUpdateClick = useCallback(async () => {
-        // Basic validation before calling handler
         if (!recordType || !FormComponent || !formData || !primaryKeyField) {
             setGeneralError("Cannot update: Missing component configuration."); return;
         }
@@ -146,42 +154,39 @@ export default function TimeTableEditModal({
         setGeneralError("");
 
         const entityKey = getEntityKeyByRecordType(recordType);
-        if (!entityKey) { /* ... error handling ... */ setIsLoading(false); return; }
+        if (!entityKey) {setIsLoading(false); return; }
 
         let dataToSave = { ...formData };
-        let validationExtra = { editingId: recordId, recordType: recordType }; // Pass recordType for clarity
-
-        // Prepare context for nested/complex types (similar to AddModal but using existing data)
+        let validationExtra = { editingId: recordId, recordType: recordType };
         if (recordType === 'semester') {
             const parentId = dataToSave.yearCode;
-            if (!parentId) { /* ... error handling ... */ setIsLoading(false); return; }
-            const years = getRecords("years") || []; // Re-fetch fresh data before save? Or rely on memoized?
+            if (!parentId) { setIsLoading(false); return; }
+            const years = getRecords("years") || []; 
             const parentYear = years.find(y => y.yearCode === parentId);
             if (parentYear) {
                 validationExtra.existingSemesters = (parentYear.semesters || []).filter(s => s.semesterCode !== recordId);
                 validationExtra.yearRecord = parentYear;
-            } else { /* ... error handling ... */ setIsLoading(false); return; }
+            } else {  setIsLoading(false); return; }
         } else if (recordType === 'room') {
              const parentId = dataToSave.siteCode;
-             if (!parentId) { /* ... error handling ... */ setIsLoading(false); return; }
+             if (!parentId) { setIsLoading(false); return; }
              const sites = getRecords("sites") || [];
              const parentSite = sites.find(s => s.siteCode === parentId);
              if (parentSite) {
                  validationExtra.existingRooms = (parentSite.rooms || []).filter(r => r.roomCode !== recordId);
                  validationExtra.siteRecord = parentSite;
-             } else { /* ... error handling ... */ setIsLoading(false); return; }
+             } else {setIsLoading(false); return; }
         } else if (entityKey) {
-             // For simple entities, provide all existing records excluding self
             try {
                 const allRecords = getRecords(entityKey) || [];
-                const idField = primaryKeyField; // Already determined
+                const idField = primaryKeyField;
                 validationExtra[`existing${entityKey.charAt(0).toUpperCase() + entityKey.slice(1)}`] = allRecords.filter(r => r[idField] !== recordId);
             } catch (e) { console.error("Error getting records for validation", e); }
         }
 
         console.log(`[EditModal] Updating recordType: ${recordType}, entityKey: ${entityKey}, ID: ${recordId}`);
-        // console.log("[EditModal] Data to save:", dataToSave);
-        // console.log("[EditModal] Validation extra:", validationExtra);
+        console.log("[EditModal] Data to save:", dataToSave);
+        console.log("[EditModal] Validation extra:", validationExtra);
 
         const result = await handleSaveOrUpdateRecord(entityKey, dataToSave, "edit", validationExtra);
         setIsLoading(false);
@@ -198,20 +203,18 @@ export default function TimeTableEditModal({
 
 
     const handleDeleteClick = useCallback(() => {
-        // Basic validation before calling handler
-        if (!recordType || !formData || !primaryKeyField) { /* ... error handling ... */ return; }
+        if (!recordType || !formData || !primaryKeyField) { return; }
         const recordId = formData[primaryKeyField];
-        if (!recordId) { /* ... error handling ... */ return; }
+        if (!recordId) { return; }
         const entityKey = getEntityKeyByRecordType(recordType);
-        if (!entityKey) { /* ... error handling ... */ return; }
+        if (!entityKey) {return; }
 
-        // ✅ Determine Parent Identifier for Nested Deletes
         let parentId = null;
         if (recordType === 'semester') {
-            parentId = formData.yearCode; // Get parent yearCode from current form data
+            parentId = formData.yearCode; 
             if (!parentId) { setGeneralError("Cannot delete semester: Parent Year ID missing."); return; }
         } else if (recordType === 'room') {
-             parentId = formData.siteCode; // Get parent siteCode from current form data
+             parentId = formData.siteCode;
              if (!parentId) { setGeneralError("Cannot delete room: Parent Site ID missing."); return; }
         }
 
@@ -222,28 +225,26 @@ export default function TimeTableEditModal({
         setGeneralError(""); setErrors({});
         console.log(`[EditModal] Deleting recordType: ${recordType}, entityKey: ${entityKey}, ID: ${recordId}, ParentID: ${parentId}`);
 
-        // Call the delete handler, passing parentId if it's a nested delete
         handleDeleteEntityFormSubmit(
             entityKey,
             recordId,
-            (successMessage) => { // onSuccess
+            (successMessage) => {
                 console.log("[EditModal] Delete successful:", successMessage);
                 setIsDeleting(false);
                 onSave?.(); onClose?.();
                 alert(successMessage || "Record deleted.");
             },
-            (errorMessage) => { // onError
+            (errorMessage) => {
                 console.error("[EditModal] Delete failed:", errorMessage);
                 setIsDeleting(false);
                 setGeneralError(errorMessage || "Failed to delete record.");
             },
-            parentId // ✅ Pass the parentIdentifier
+            parentId 
         );
 
     }, [recordType, formData, primaryKeyField, onSave, onClose]);
 
 
-    // --- Render Logic ---
     return (
         <PopupModal open={open} onClose={onClose} title={`Edit ${recordTypeLabels[recordType] || 'Record'}`}>
             <FormWrapper>
@@ -255,7 +256,6 @@ export default function TimeTableEditModal({
                             errors={errors}
                             onChange={handleFormChange}
                             mode="edit"
-                            // ✅ Pass loaded options for Select dropdowns
                             selectOptions={selectOptions}
                             // Example of passing specific lists if needed directly:
                             // years={selectOptions.years}

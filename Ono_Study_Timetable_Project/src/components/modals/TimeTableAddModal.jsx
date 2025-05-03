@@ -55,12 +55,10 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
 
   const FormComponent = recordType ? formComponentMap[recordType] : null;
 
-  // --- ✅ Preload data for Select dropdowns (Memoized) ---
   const selectOptions = useMemo(() => {
-    if (!open) return {}; // Don't load if not open
+    if (!open) return {};
     console.log("[AddModal] Loading data for select options...");
     try {
-        // Fetch data needed by ANY of the potential forms
         const years = getRecords("years") || [];
         const sites = getRecords("sites") || [];
         const lecturers = getRecords("lecturers") || [];
@@ -68,12 +66,8 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
         const allSemesters = years.flatMap(y => (y.semesters || []).map(s => ({ ...s, yearLabel: `Year ${y.yearNumber}` })));
         const formattedRooms = sites.flatMap(site =>
           (site.rooms || []).map(room => ({
-              // value יהיה קוד החדר
               value: room.roomCode,
-              // label ישלב את שם החדר ושם האתר
               label: `${room.roomName || `Room (${room.roomCode})`} @ ${site.siteName || `Site (${site.siteCode})`}`
-              // אפשר להוסיף גם siteCode אם צריך לסינון עתידי
-              // siteCode: site.siteCode
           }))
       );
 
@@ -89,7 +83,7 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
          console.error("[AddModal] Error loading data for select options:", error);
          return { years: [], sites: [], lecturers: [], courses: [], semesters: [] };
     }
-  }, [open]); // Reload options when modal opens
+  }, [open]); 
 
   // --- Effects ---
   useEffect(() => {
@@ -118,22 +112,27 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
 
   const handleFormChange = useCallback((event) => {
     const { name, value, type, checked } = event.target;
-    const val = type === 'checkbox' ? checked : value;
-    setFormData((prev) => ({ ...prev, [name]: val }));
-    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: undefined }));
+    const newValue = type === 'checkbox' ? checked : value;
+    setFormData((prev) => {
+         const updatedData = { ...prev, [name]: newValue };
+         if (name === 'allDay' && newValue === true) {
+             updatedData.startHour = '';
+             updatedData.endHour = ''; 
+         }
+        return updatedData;
+    });
+    if (errors[name]) { setErrors((prev) => ({ ...prev, [name]: undefined })); }
     setGeneralError("");
-  }, [errors]);
+}, [errors]);
 
   const handleSaveClick = useCallback(async () => {
-    if (!recordType || !FormComponent) { /* ... error handling ... */ return; }
+    if (!recordType || !FormComponent) {return; }
     setIsLoading(true); setErrors({}); setGeneralError("");
     const entityKey = getEntityKeyByRecordType(recordType);
-    if (!entityKey) { /* ... error handling ... */ setIsLoading(false); return; }
+    if (!entityKey) {setIsLoading(false); return; }
 
     let dataToSave = { ...formData };
-    let validationExtra = { recordType: recordType }; // Pass recordType for clarity
-
-    // Prepare context for nested/complex types
+    let validationExtra = { recordType: recordType };
      if (recordType === 'semester') {
          const parentId = dataToSave.yearCode;
          if (!parentId) { setErrors({ yearCode: "Please select the parent Year." }); setIsLoading(false); return; }
@@ -142,7 +141,7 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
          if (parentYear) {
             validationExtra.existingSemesters = parentYear.semesters || [];
             validationExtra.yearRecord = parentYear;
-         } else { /* ... error handling ... */ setIsLoading(false); return; }
+         } else {setIsLoading(false); return; }
      } else if (recordType === 'room') {
           const parentId = dataToSave.siteCode;
           if (!parentId) { setErrors({ siteCode: "Please select the parent Site." }); setIsLoading(false); return; }
@@ -151,20 +150,13 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
           if (parentSite) {
              validationExtra.existingRooms = parentSite.rooms || [];
              validationExtra.siteRecord = parentSite;
-          } else { /* ... error handling ... */ setIsLoading(false); return; }
+          } else {setIsLoading(false); return; }
      } else if (entityKey) {
-        // For simple entities, provide all existing records
         try { validationExtra[`existing${entityKey.charAt(0).toUpperCase() + entityKey.slice(1)}`] = getRecords(entityKey) || []; }
         catch (e) { console.error("Error getting records for validation", e); }
      }
-
-    // console.log(`[AddModal] Saving recordType: ${recordType}, entityKey: ${entityKey}`);
-    // console.log("[AddModal] Data to save:", dataToSave);
-    // console.log("[AddModal] Validation extra:", validationExtra);
-
     const result = await handleSaveOrUpdateRecord(entityKey, dataToSave, "add", validationExtra);
     setIsLoading(false);
-
     if (result.success) {
       console.log("[AddModal] Save successful.");
       onSave?.(); onClose?.();
@@ -174,9 +166,6 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
       setGeneralError(result.message || "Failed to save record.");
     }
   }, [recordType, formData, FormComponent, onSave, onClose]);
-
-
-  // --- Render Logic ---
   return (
     <PopupModal open={open} onClose={onClose} title={`Add New ${recordTypeLabels[recordType] || 'Record'}`}>
       <FormWrapper>
@@ -184,17 +173,13 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
           <InputLabel id="add-record-type-label">Select Record Type</InputLabel>
           <Select labelId="add-record-type-label" value={recordType} label="Select Record Type" onChange={handleRecordTypeChange}>
             {Object.entries(recordTypeLabels).map(([key, label]) => (
-               // Optionally filter out 'course' if it's only handled by dedicated modal
-               // key !== 'course' &&
               <MenuItem key={key} value={key}>
                 {label}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
-
         {generalError && <Alert severity="error" sx={{ mb: 2 }}>{generalError}</Alert>}
-
         <Box sx={{ minHeight: '200px' }}>
           {FormComponent ? (
             <FormComponent
@@ -202,7 +187,6 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
               errors={errors}
               onChange={handleFormChange}
               mode="add"
-              // ✅ Pass loaded options for Select dropdowns
               selectOptions={selectOptions}
             />
           ) : (
@@ -210,7 +194,6 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
           )}
            {!recordType && <Typography sx={{ color: 'text.secondary', textAlign: 'center', mt: 4 }}>Please select a record type above.</Typography>}
         </Box>
-
         <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ mt: 3 }}>
           <CustomButton variant="outlined" onClick={onClose} disabled={isLoading}>
             Cancel

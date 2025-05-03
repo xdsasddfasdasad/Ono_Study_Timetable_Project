@@ -83,126 +83,136 @@ const updateNestedArray = (parentArray, parentKeyField, parentId, nestedArrayFie
 // --- Main Save/Update Handler ---
 export const handleSaveOrUpdateRecord = async (
     entityKey,          // The storage key (e.g., "years", "courses", "sites")
-    formData,           // Data from the form being submitted
+    formData,           // Data from the form (potentially cleaned by caller)
     actionType,         // "add" or "edit"
-    validationExtra = {} // Extra context for validation (e.g., existing records, editingId, parentRecord)
+    validationExtra = {}, // Context for validation (e.g., existing records, editingId)
+    // ✅ ADDED: Flag to bypass the internal validation call if caller already validated
+    skipInternalValidation = false
 ) => {
-    console.log(`[Handler:SaveUpdate] Start: entityKey=${entityKey}, actionType=${actionType}`);
+    // Log entry point and parameters
+    console.log(`[Handler:SaveUpdate] Start: entityKey=${entityKey}, actionType=${actionType}, skipValidation=${skipInternalValidation}`);
+    // Avoid logging sensitive formData by default in production, use during debug if needed
     // console.log("[Handler:SaveUpdate] formData:", formData);
     // console.log("[Handler:SaveUpdate] validationExtra:", validationExtra);
 
     try {
-        let recordType = null;        // The logical type (e.g., 'semester', 'room', 'year')
+        // --- 1. Determine Operation Specifics (recordType, isNested, keys) ---
+        let recordType = null;
         let isNested = false;
-        let parentEntityKey = null;   // Storage key of the parent ('years', 'sites')
-        let parentKeyField = null;    // Key field of the parent ('yearCode', 'siteCode')
-        let parentId = null;          // ID of the specific parent record
-        let nestedArrayField = null;  // Array field in parent ('semesters', 'rooms')
-        let nestedKeyField = null;    // Key field of the nested item ('semesterCode', 'roomCode')
+        let parentEntityKey = null;
+        let parentKeyField = null;
+        let parentId = null;
+        let nestedArrayField = null;
+        let nestedKeyField = null; // Primary key of the nested item
 
-        // --- 1. Identify Operation Type (Nested vs. Standard) ---
+        // Check for nested operations first
         if (entityKey === 'years' && formData.semesterCode) {
             isNested = true; recordType = 'semester'; parentEntityKey = 'years';
             parentKeyField = 'yearCode'; parentId = formData.yearCode;
-            nestedArrayField = 'semesters'; nestedKeyField = getPrimaryKeyFieldByRecordType('semester'); // 'semesterCode'
-            if (!nestedKeyField) throw new Error("Config error: Missing primary key for 'semester'.");
+            nestedArrayField = 'semesters'; nestedKeyField = getPrimaryKeyFieldByRecordType('semester');
+            if (!nestedKeyField) throw new Error("Config error: Missing primary key mapping for 'semester'.");
         } else if (entityKey === 'sites' && formData.roomCode) {
              isNested = true; recordType = 'room'; parentEntityKey = 'sites';
              parentKeyField = 'siteCode'; parentId = formData.siteCode;
-             nestedArrayField = 'rooms'; nestedKeyField = getPrimaryKeyFieldByRecordType('room'); // 'roomCode'
-             if (!nestedKeyField) throw new Error("Config error: Missing primary key for 'room'.");
-             // Note: Updating the flat 'rooms' list is NOT handled here.
+             nestedArrayField = 'rooms'; nestedKeyField = getPrimaryKeyFieldByRecordType('room');
+             if (!nestedKeyField) throw new Error("Config error: Missing primary key mapping for 'room'.");
         } else if (matchKeyMap[entityKey]) {
             // Standard top-level entity
-            isNested = false; parentEntityKey = entityKey; // Parent is the entity itself
-            // Infer recordType (remove trailing 's' if exists)
+            isNested = false; parentEntityKey = entityKey; // Operate directly on this key
             recordType = entityKey.endsWith('s') ? entityKey.slice(0, -1) : entityKey;
-            // Allow override from validationExtra if provided (more explicit)
-            recordType = validationExtra.recordType || recordType;
+            recordType = validationExtra.recordType || recordType; // Allow override
         } else {
-             throw new Error(`Configuration error: Unknown entity key '${entityKey}'.`);
+             // If entityKey is not in matchKeyMap and not handled as nested, it's an error
+             throw new Error(`Configuration error: Unknown or unhandled entity key '${entityKey}'.`);
         }
-        console.log(`[Handler:SaveUpdate] Determined recordType: ${recordType}, isNested: ${isNested}`);
+        console.log(`[Handler:SaveUpdate] Determined: recordType=${recordType}, isNested=${isNested}, parentEntityKey=${parentEntityKey}`);
 
-        // --- 2. Perform Validation ---
-        const validationErrors = validateFormByType(recordType, formData, validationExtra);
-        if (Object.keys(validationErrors).length > 0) {
-            console.warn(`[Handler:SaveUpdate] Validation failed for ${recordType}:`, validationErrors);
-            return { success: false, errors: validationErrors, message: "Validation failed. Please check the fields." };
+        // --- 2. Perform Validation (Optional based on flag) ---
+        if (!skipInternalValidation) {
+            console.log(`[Handler:SaveUpdate] Running internal validation for type: ${recordType}`);
+            const validationErrors = validateFormByType(recordType, formData, validationExtra);
+            if (Object.keys(validationErrors).length > 0) {
+                console.warn(`[Handler:SaveUpdate] Internal validation failed for ${recordType}:`, validationErrors);
+                // Return validation errors so the caller can display them
+                return { success: false, errors: validationErrors, message: "Internal validation failed." };
+            }
+            console.log(`[Handler:SaveUpdate] Internal validation passed for ${recordType}.`);
+        } else {
+             console.log(`[Handler:SaveUpdate] Skipping internal validation as requested by caller.`);
         }
-        console.log(`[Handler:SaveUpdate] Validation passed for ${recordType}.`);
 
-        // --- 3. Prepare Data for Saving ---
+        // --- 3. Prepare Data (Hashing, Cleaning) ---
+        // Work with a copy to avoid mutating the original formData argument
         let preparedData = { ...formData };
-        // Hash student password if adding or password provided during edit
-        if (entityKey === "students") {
-            if (actionType === 'add' || (actionType === 'edit' && preparedData.password?.length > 0)) {
-                 try {
-                     preparedData.password = await hashPassword(preparedData.password);
-                     delete preparedData.confirmPassword;
-                     console.log("[Handler:SaveUpdate] Student password hashed.");
-                 } catch (hashError) { throw new Error(`Password hashing failed: ${hashError.message}`); }
-            } else {
-                // Remove password fields if not provided during edit to avoid overwriting with empty/null
-                delete preparedData.password;
-                delete preparedData.confirmPassword;
+
+        // Hash student password if it exists in the preparedData
+        // (The modal should have already removed it if it was blank during edit)
+        if (entityKey === "students" && preparedData.password && preparedData.password.length > 0) {
+            try {
+                console.log("[Handler:SaveUpdate] Hashing student password...");
+                preparedData.password = await hashPassword(preparedData.password);
+                // confirmPassword should already be removed by the caller (modal)
+                console.log("[Handler:SaveUpdate] Student password hashed.");
+            } catch (hashError) {
+                // Wrap hashing error for consistent error handling
+                throw new Error(`Password hashing failed: ${hashError.message}`);
             }
         }
-        // Cleanup nested data if needed (remove parent IDs from nested objects, etc.)
+
+        // Prepare specific data structure for nested items if needed
         let nestedItemData = null;
         if (isNested) {
             nestedItemData = { ...preparedData };
-            if (recordType === 'room') { // Only save room-specific fields in the nested array
+            // Clean the nested item: Remove fields that belong only to the parent context, etc.
+            if (recordType === 'room') {
                 nestedItemData = {
-                     roomCode: preparedData.roomCode,
+                     roomCode: preparedData.roomCode, // Keep required fields
                      roomName: preparedData.roomName,
                      notes: preparedData.notes || ""
-                     // Add other relevant room fields here
+                     // Only include fields defined for a room object within the site's 'rooms' array
                 };
-            } else if (recordType === 'semester') { // Only save semester-specific fields
-                 // Example: If yearCode shouldn't be duplicated inside the semester object
-                 // delete nestedItemData.yearCode;
+                // Remove parent identifier if it shouldn't be stored within the nested object
+                // delete nestedItemData.siteCode;
+            } else if (recordType === 'semester') {
+                // Remove parent identifier if it shouldn't be stored within the nested object
+                // delete nestedItemData.yearCode;
             }
         }
 
         // --- 4. Perform Save/Update Operation ---
         let operationSuccess = false;
-        let finalMessage = "Operation completed successfully.";
+        let finalMessage = `Successfully ${actionType === 'add' ? 'added' : 'updated'} ${recordType}.`; // Optimistic message
+
+        const dataArray = getRecords(parentEntityKey) || []; // Get the array (top-level or parent)
 
         if (isNested) {
             // --- Nested Add/Update ---
-            if (!parentId) throw new Error(`Parent ID (${parentKeyField}) is missing for nested ${recordType}.`);
-            const parentArray = getRecords(parentEntityKey) || [];
-            const updateResult = updateNestedArray(parentArray, parentKeyField, parentId, nestedArrayField, nestedItemData, nestedKeyField, actionType);
-
+            if (!parentId) throw new Error(`Data error: Parent ID (${parentKeyField}) missing for nested ${recordType}.`);
+            const updateResult = updateNestedArray(dataArray, parentKeyField, parentId, nestedArrayField, nestedItemData, nestedKeyField, actionType);
             if (updateResult) {
-                operationSuccess = saveRecords(parentEntityKey, parentArray); // Save the whole parent array
+                operationSuccess = saveRecords(parentEntityKey, dataArray); // Save the modified parent array
                 if (!operationSuccess) finalMessage = `Storage error: Failed to save updated ${parentEntityKey}.`;
             } else {
-                 // updateNestedArray failed (e.g., parent not found, duplicate add)
-                 operationSuccess = false;
-                 finalMessage = `Operation failed: Could not ${actionType} nested ${recordType}. Check logs.`;
+                 operationSuccess = false; finalMessage = `Operation failed: Could not ${actionType} nested ${recordType}. Check logs or data.`;
             }
         } else {
             // --- Standard (Top-Level) Add/Update ---
-            const primaryKeyField = matchKeyMap[parentEntityKey]; // Use parentEntityKey (which is entityKey here)
+            const primaryKeyField = matchKeyMap[parentEntityKey];
             if (!primaryKeyField) throw new Error(`Configuration error: Missing primary key for '${parentEntityKey}'`);
-
-            const existingRecords = getRecords(parentEntityKey) || [];
             const recordId = preparedData[primaryKeyField];
-            if (!recordId) throw new Error(`Data error: Missing primary key value for '${primaryKeyField}' in form data.`);
-            const existingIndex = existingRecords.findIndex(r => r[primaryKeyField] === recordId);
+            if (!recordId) throw new Error(`Data error: Missing primary key value for '${primaryKeyField}'.`);
+            const existingIndex = dataArray.findIndex(r => r[primaryKeyField] === recordId);
 
             if (actionType === "add") {
-                if (existingIndex !== -1) throw new Error(`Duplicate error: Record with ${primaryKeyField}=${recordId} already exists.`);
-                existingRecords.push(preparedData);
-                operationSuccess = saveRecords(parentEntityKey, existingRecords);
+                if (existingIndex !== -1) throw new Error(`Duplicate error: Record ${primaryKeyField}=${recordId} already exists.`);
+                dataArray.push(preparedData); // Add the fully prepared data
+                operationSuccess = saveRecords(parentEntityKey, dataArray);
                 if (!operationSuccess) finalMessage = `Storage error: Failed to save new ${recordType}.`;
-
             } else if (actionType === "edit") {
-                if (existingIndex === -1) throw new Error(`Not found error: Record with ${primaryKeyField}=${recordId} not found for editing.`);
-                existingRecords[existingIndex] = { ...existingRecords[existingIndex], ...preparedData }; // Merge update
-                operationSuccess = saveRecords(parentEntityKey, existingRecords);
+                if (existingIndex === -1) throw new Error(`Not found error: Record ${primaryKeyField}=${recordId} not found for editing.`);
+                // Merge updates onto the existing record to preserve any unchanged fields
+                dataArray[existingIndex] = { ...dataArray[existingIndex], ...preparedData };
+                operationSuccess = saveRecords(parentEntityKey, dataArray);
                 if (!operationSuccess) finalMessage = `Storage error: Failed to save updated ${recordType}.`;
             } else {
                  throw new Error(`Invalid action type '${actionType}'.`);
@@ -213,13 +223,14 @@ export const handleSaveOrUpdateRecord = async (
         console.log(`[Handler:SaveUpdate] Result: success=${operationSuccess}, message=${finalMessage}`);
         return { success: operationSuccess, message: finalMessage };
 
-    } catch (error) {
+    } catch (error) { // Catch all errors (config, validation, hashing, storage, data issues)
         console.error(`[Handler:SaveUpdate] CRITICAL ERROR for ${entityKey} (${actionType}):`, error);
+        // Try to return specific validation errors if they were passed up
+        // Otherwise, return the general error message
         return {
             success: false,
-            // Return validation errors if they were the cause and attached to the error
-            errors: error.validationErrors || null,
-            message: error.message || `Unexpected error during ${actionType}.`
+            errors: error.validationErrors || null, // Pass back validation errors if available
+            message: error.message || `Unexpected error during ${actionType} operation.`
         };
     }
 }; // End of handleSaveOrUpdateRecord
