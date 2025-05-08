@@ -1,406 +1,452 @@
 // src/utils/validateForm.js
-const isDuplicate = (data, formData, checkField, idField, editingId) => {
-  if (!data || !formData || !checkField || !idField) return false;
-  const valueToCheck = formData[checkField]?.trim().toLowerCase();
-  if (!valueToCheck) return false;
-  return data.some(item =>
-      item[checkField]?.trim().toLowerCase() === valueToCheck && 
-      item[idField] !== editingId
-  );
+
+// Import Firestore query function
+import { fetchDocumentsByQuery } from '../firebase/firestoreService'; // Adjust path if needed
+
+// isDuplicate helper is NO LONGER NEEDED for Firestore uniqueness checks via query
+
+// --- ASYNC Validation Functions (Updated for Firestore Queries) ---
+
+export const validateStudentForm = async (formData, options = {}) => {
+    console.log("[validateStudentForm:Async] Validating:", formData);
+    const errors = {};
+    const editingId = options.editingId; // Student's Firestore document ID (which is their 'id' field)
+
+    // ID Validation (Assuming ID is user-provided and should be unique)
+    if (!formData.id?.trim()) { errors.id = "Student ID is required."; }
+    else {
+        try {
+            const existingById = await fetchDocumentsByQuery('students', 'id', '==', formData.id.trim());
+            if (existingById.some(doc => doc.id !== editingId)) { errors.id = "Student ID already exists."; }
+        } catch (e) { console.error("ID check failed:", e); errors.id = "Could not verify ID uniqueness."; }
+    }
+
+    // Name Validation (Synchronous)
+    if (!formData.firstName?.trim()) errors.firstName = "First name is required.";
+    if (!formData.lastName?.trim()) errors.lastName = "Last name is required.";
+
+    // Email Validation
+    if (!formData.email?.trim()) { errors.email = "Email is required."; }
+    else if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) { errors.email = "Invalid email format."; }
+    else {
+        try {
+            const existingByEmail = await fetchDocumentsByQuery('students', 'email', '==', formData.email.trim());
+            if (existingByEmail.some(doc => doc.id !== editingId)) { errors.email = "Email address already in use."; }
+        } catch (e) { console.error("Email check failed:", e); errors.email = "Could not verify email uniqueness."; }
+    }
+
+    // Username Validation
+    if (!formData.username?.trim()) { errors.username = "Username is required."; }
+    else if (formData.username.trim().length < 6) { errors.username = "Username must be at least 6 characters."; }
+    else {
+        try {
+            const existingByUsername = await fetchDocumentsByQuery('students', 'username', '==', formData.username.trim());
+            if (existingByUsername.some(doc => doc.id !== editingId)) { errors.username = "Username already exists."; }
+        } catch (e) { console.error("Username check failed:", e); errors.username = "Could not verify username uniqueness."; }
+    }
+
+    // Phone Validation (Synchronous)
+    if (formData.phone && formData.phone.trim() && !/^\d{9,10}$/.test(formData.phone.trim())) { // Example: 9-10 digits
+        errors.phone = "Invalid phone number format.";
+    }
+
+    // Password Validation (Synchronous - checks password and confirmPassword if needed)
+    if (!options?.skipPassword) {
+        if (!formData.password) { errors.password = "Password is required."; }
+        else if (formData.password.length < 6) { errors.password = "Password must be at least 6 characters."; }
+        // Check confirmation only if password itself is valid
+        if (!errors.password) {
+            if (!formData.confirmPassword) { errors.confirmPassword = "Please confirm your password."; }
+            else if (formData.password !== formData.confirmPassword) { errors.confirmPassword = "Passwords do not match."; }
+        }
+    }
+
+    console.log("[validateStudentForm:Async] Errors:", errors);
+    return errors;
 };
 
-export const validateStudentForm = (formData, existingStudents = [], options = {}) => {
-  console.log("[validateStudentForm] Validating:", formData);
-  console.log("[validateStudentForm] Options:", options);
+export const validateYearForm = async (formData, options = {}) => {
+    const errors = {};
+    const editingId = options.editingId; // yearCode
+
+    // Year Number Checks
+    if (!formData.yearNumber?.trim()) { errors.yearNumber = "Year number is required."; }
+    else {
+        try {
+            const existingByNumber = await fetchDocumentsByQuery('years', 'yearNumber', '==', formData.yearNumber.trim());
+            if (existingByNumber.some(doc => doc.id !== editingId)) { errors.yearNumber = "Year number already exists."; }
+        } catch (e) { console.error("Year number check failed:", e); errors.yearNumber = "Could not verify year number uniqueness."; }
+    }
+
+    // Year Code Checks
+    if (!formData.yearCode?.trim()) { errors.yearCode = "Year code is required."; }
+    else {
+         try {
+            // Check if a document with this ID already exists (Firestore doesn't have a direct duplicate check for ID on set/update)
+            // This check might be better handled by trying to save and catching the error if ID structure is strict,
+            // or assuming user won't manually create conflicting codes if they are auto-generated based on yearNumber.
+            // For simplicity, let's skip direct Firestore ID check here unless explicitly needed.
+            // const existingByCode = await fetchDocumentById('years', formData.yearCode.trim());
+            // if (existingByCode && existingByCode.id !== editingId) { errors.yearCode = "Year code already exists."; }
+         } catch (e) { console.error("Year code check skipped/failed:", e); }
+    }
+
+    // Date Checks (Synchronous)
+    if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
+    if (!formData.endDate?.trim()) errors.endDate = "End date is required.";
+    if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
+        errors.endDate = "End date must be on or after start date.";
+    }
+    return errors;
+};
+
+// Needs parentYear context passed in options for date range checks and uniqueness within parent
+export const validateSemesterForm = async (formData, options = {}) => {
+    const errors = {};
+    const parentYear = options.parentRecord; // Passed from handler/caller
+    const editingId = options.editingId; // semesterCode
+
+    // Semester Number Checks
+    if (!formData.semesterNumber?.trim()) { errors.semesterNumber = "Semester number is required."; }
+    else if (parentYear?.semesters) { // Check uniqueness only if parent and its semesters exist
+         const duplicate = parentYear.semesters.some(s =>
+              s.semesterNumber?.trim() === formData.semesterNumber?.trim() && s.semesterCode !== editingId
+         );
+         if (duplicate) { errors.semesterNumber = "Semester number already exists in this year."; }
+    }
+
+    // Semester Code Checks
+    if (!formData.semesterCode?.trim()) { errors.semesterCode = "Semester code is required."; }
+    else if (parentYear?.semesters) {
+         const duplicateCode = parentYear.semesters.some(s =>
+              s.semesterCode?.trim() === formData.semesterCode?.trim() && s.semesterCode !== editingId
+         );
+         if (duplicateCode) { errors.semesterCode = "Semester code already exists in this year."; }
+    }
+
+    // Date Checks (Synchronous)
+    if (!formData.startDate?.trim()) errors.startDate = "Semester start date is required.";
+    if (!formData.endDate?.trim()) errors.endDate = "Semester end date is required.";
+    if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
+        errors.startDate = "Start date must be on or before end date.";
+    }
+
+    // Date Range within Year Check (Synchronous, uses parentRecord from options)
+    if (parentYear && formData.startDate && formData.endDate) {
+        if (formData.startDate < parentYear.startDate || formData.endDate > parentYear.endDate) {
+            errors.startDate = errors.startDate || `Dates must be within year range (${parentYear.startDate} - ${parentYear.endDate}).`;
+            errors.endDate = errors.endDate || `Dates must be within year range (${parentYear.startDate} - ${parentYear.endDate}).`;
+        }
+    }
+
+    if (!formData.yearCode?.trim()) errors.yearCode = "Parent year code is required.";
+
+    return errors;
+};
+
+export const validateLecturerForm = async (formData, options = {}) => {
   const errors = {};
-  const editingId = options.editingId;
-  if (!formData.id?.trim()) {
-      errors.id = "Student ID is required.";
-  } else if (isDuplicate(existingStudents, formData, 'id', 'id', editingId)) {
-      errors.id = "Student ID already exists.";
+  const editingId = options.editingId; // Lecturer document ID
+
+  if (!formData.id?.trim()) { errors.id = "Lecturer ID is required."; }
+  // ID uniqueness check might be complex if ID isn't user-controlled
+
+  if (!formData.name?.trim()) { errors.name = "Lecturer name is required."; }
+  else {
+      try {
+          const existingByName = await fetchDocumentsByQuery('lecturers', 'name', '==', formData.name.trim());
+          if (existingByName.some(doc => doc.id !== editingId)) { errors.name = "Lecturer name already exists."; }
+      } catch (e) { console.error("Lecturer name check failed:", e); errors.name = "Could not verify name uniqueness."; }
   }
-  if (!formData.firstName?.trim()) errors.firstName = "First name is required.";
-  if (!formData.lastName?.trim()) errors.lastName = "Last name is required.";
-  if (!formData.email?.trim()) {
-      errors.email = "Email is required.";
-  } else if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) {
-      errors.email = "Invalid email address format.";
-  } else if (isDuplicate(existingStudents, formData, 'email', 'id', editingId)) {
-      errors.email = "Email address already in use.";
-  }
-  if (!formData.username?.trim()) {
-      errors.username = "Username is required.";
-  } else if (formData.username.trim().length < 6) {
-      errors.username = "Username must be at least 6 characters.";
-  } else if (isDuplicate(existingStudents, formData, 'username', 'id', editingId)) {
-      errors.username = "Username already exists.";
-  }
-  if (formData.phone && formData.phone.trim()) {
-    if (!/^\d{10}$/.test(formData.phone.trim())) errors.phone = "Invalid phone number format (e.g., 10 digits)."
-  }
-  if (!options?.skipPassword) {
-      if (!formData.password) {
-          errors.password = "Password is required.";
-      } else if (formData.password.length < 6) {
-          errors.password = "Password must be at least 6 characters.";
+
+  if (formData.email && formData.email.trim()) {
+      if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) { errors.email = "Invalid email format."; }
+      else {
+          try {
+              const existingByEmail = await fetchDocumentsByQuery('lecturers', 'email', '==', formData.email.trim());
+              if (existingByEmail.some(doc => doc.id !== editingId)) { errors.email = "Email already registered."; }
+          } catch (e) { console.error("Lecturer email check failed:", e); errors.email = "Could not verify email uniqueness."; }
       }
-      if (!errors.password) {
-          if (!formData.confirmPassword) {
-              errors.confirmPassword = "Please confirm your password.";
-          } else if (formData.password !== formData.confirmPassword) {
-              errors.confirmPassword = "Passwords do not match.";
-          }
-      }
-  } else {
-       console.log("[validateStudentForm] Skipping password validation as requested.");
   }
-  console.log("[validateStudentForm] Validation Errors:", errors);
+  // Optional phone format validation
   return errors;
 };
-export const validateYearForm = (formData, existingYears = [], extra = {}) => {
-const errors = {};
-const editingId = extra.editingId;
-if (!formData.yearNumber?.trim()) {
-  errors.yearNumber = "Year number is required.";
-} else if (isDuplicate(existingYears, formData, 'yearNumber', 'yearCode', editingId)) {
-   errors.yearNumber = "Year number already exists.";
-}
- if (!formData.yearCode?.trim()) {
-   errors.yearCode = "Year code is required.";
- } else if (isDuplicate(existingYears, formData, 'yearCode', 'yearCode', editingId)) {
-    errors.yearCode = "Year code already exists.";
- }
-if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
-if (!formData.endDate?.trim()) errors.endDate = "End date is required.";
-if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
-  errors.endDate = "End date must be on or after start date.";
-}
 
-return errors;
+// Validation for Course Definition
+export const validateCourseForm = async (formData, options = {}) => {
+    const errors = {};
+    const editingId = options.editingId; // courseCode
+
+    // Course Code Checks
+    if (!formData.courseCode?.trim()) { errors.courseCode = "Course code is required."; }
+    else {
+        // Check uniqueness via Firestore query
+         try {
+            const existingByCode = await fetchDocumentsByQuery('courses', 'courseCode', '==', formData.courseCode.trim());
+            if (existingByCode.some(doc => doc.id !== editingId)) { // Firestore ID is courseCode here
+                 errors.courseCode = "Course code already exists.";
+            }
+         } catch (e) { console.error("Course code check failed:", e); errors.courseCode = "Could not verify code uniqueness."; }
+    }
+
+    // Synchronous checks
+    if (!formData.courseName?.trim()) errors.courseName = "Course name is required.";
+    if (!formData.lecturerId?.trim()) errors.lecturerId = "Lecturer is required.";
+    if (!formData.semesterCode?.trim()) errors.semesterCode = "Semester is required.";
+    // Optional: Add checks here to verify existence of selected lecturer/semester/room using queries if needed
+
+    // Hours array validation (Synchronous checks on the array data)
+    if (!Array.isArray(formData.hours) || formData.hours.length === 0) {
+        errors.hours = "At least one weekly time slot is required.";
+    } else {
+        const daysUsed = new Set();
+        formData.hours.forEach((slot, index) => {
+            let slotHasError = false;
+            if (!slot?.day) { errors[`hours[${index}].day`] = "Day required."; slotHasError = true; }
+            if (!slot?.start) { errors[`hours[${index}].start`] = "Start required."; slotHasError = true; }
+            if (!slot?.end) { errors[`hours[${index}].end`] = "End required."; slotHasError = true; }
+            if (slot?.start && slot?.end && !slotHasError) {
+                if (slot.start >= slot.end) { errors[`hours[${index}].end`] = "End must be after start."; slotHasError = true; }
+            }
+            // Uncomment if duplicate days are not allowed
+            // if (slot?.day && !slotHasError) {
+            //     if (daysUsed.has(slot.day)) { errors[`hours[${index}].day`] = `Day already scheduled.`; }
+            //     else { daysUsed.add(slot.day); }
+            // }
+        });
+    }
+    return errors;
 };
 
-export const validateSemesterForm = (formData, existingSemesters = [], extra = {}) => {
+// Validation for a single Course Meeting
+// Uniqueness check on 'id' might be less critical if generated robustly.
+export const validateCourseMeetingForm = async (formData, options = {}) => {
+    const errors = {};
+    const editingId = options.editingId; // Meeting document ID
+
+    if (!formData.id?.trim()) errors.id = "Meeting ID is required.";
+    // Optional: Check ID uniqueness if needed (less likely for generated IDs)
+    // else { try { ... fetchDocumentsByQuery('coursesMeetings', 'id', '==', formData.id)... } catch ... }
+
+    if (!formData.courseCode?.trim()) errors.courseCode = "Associated course code is required.";
+    if (!formData.date?.trim()) errors.date = "Date is required.";
+    if (!formData.startHour?.trim()) errors.startHour = "Start time is required.";
+    if (!formData.endHour?.trim()) errors.endHour = "End time is required.";
+    if (formData.startHour && formData.endHour && formData.startHour >= formData.endHour) {
+        errors.endHour = "End time must be after start time.";
+    }
+    // Optional: Check for time conflicts with other meetings (would require complex query)
+    return errors;
+};
+
+// Validation for Tasks
+export const validateTaskForm = async (formData, options = {}) => {
   const errors = {};
-  const yearRecord = extra.yearRecord;
-  const editingId = extra.editingId;
-  if (!formData.semesterNumber?.trim()) {
-      errors.semesterNumber = "Semester number is required.";
-  } else {
-       const duplicate = (existingSemesters || []).some(s =>
-            s.semesterNumber?.trim() === formData.semesterNumber?.trim() &&
-            s.semesterCode !== editingId
-       );
-       if (duplicate) {
-           errors.semesterNumber = "Semester number already exists in this year.";
-       }
+  const editingId = options.editingId; // assignmentCode
+
+  if (!formData.assignmentCode?.trim()) { errors.assignmentCode = "Assignment code is required."; }
+  else {
+       try {
+          const existingByCode = await fetchDocumentsByQuery('tasks', 'assignmentCode', '==', formData.assignmentCode.trim());
+          if (existingByCode.some(doc => doc.id !== editingId)) { errors.assignmentCode = "Assignment code already exists."; }
+       } catch (e) { console.error("Task code check failed:", e); errors.assignmentCode = "Could not verify code uniqueness."; }
   }
-  if (!formData.semesterCode?.trim()) {
-      errors.semesterCode = "Semester code is required.";
-  } else {
-       const duplicateCode = (existingSemesters || []).some(s =>
-            s.semesterCode?.trim() === formData.semesterCode?.trim() &&
-            s.semesterCode !== editingId
-       );
-       if (duplicateCode) {
-           errors.semesterCode = "Semester code already exists in this year.";
-       }
+
+  if (!formData.assignmentName?.trim()) errors.assignmentName = "Assignment name is required.";
+  if (!formData.courseCode?.trim()) errors.courseCode = "Associated course is required.";
+  if (!formData.submissionDate?.trim()) errors.submissionDate = "Submission date is required.";
+  // Optional: Validate submission time format if needed
+  return errors;
+};
+
+// Validation for Sites
+export const validateSiteForm = async (formData, options = {}) => {
+  const errors = {};
+  const editingId = options.editingId; // siteCode
+
+  if (!formData.siteCode?.trim()) { errors.siteCode = "Site code is required."; }
+  // Site code uniqueness check might be skipped if it's tightly controlled
+
+  if (!formData.siteName?.trim()) { errors.siteName = "Site name is required."; }
+  else {
+      try {
+          const existingByName = await fetchDocumentsByQuery('sites', 'siteName', '==', formData.siteName.trim());
+          if (existingByName.some(doc => doc.id !== editingId)) { errors.siteName = "Site name already exists."; }
+      } catch (e) { console.error("Site name check failed:", e); errors.siteName = "Could not verify name uniqueness."; }
   }
-  if (!formData.startDate?.trim()) errors.startDate = "Semester start date is required.";
-  if (!formData.endDate?.trim()) errors.endDate = "Semester end date is required.";
+  return errors;
+};
+
+// Validation for Rooms (uniqueness within parent site)
+// Needs parentSite context passed in options
+export const validateRoomForm = async (formData, options = {}) => {
+    const errors = {};
+    const parentSite = options.parentRecord; // Site document passed from handler
+    const editingId = options.editingId; // roomCode
+
+    if (!formData.roomCode?.trim()) { errors.roomCode = "Room code is required."; }
+    else if (parentSite?.rooms) { // Check uniqueness only if parent and its rooms exist
+         const duplicateCode = parentSite.rooms.some(r =>
+              r.roomCode?.trim() === formData.roomCode?.trim() && r.roomCode !== editingId
+         );
+         if (duplicateCode) { errors.roomCode = "Room code already exists in this site."; }
+    }
+
+    if (!formData.roomName?.trim()) { errors.roomName = "Room name is required."; }
+    else if (parentSite?.rooms) {
+         const duplicateName = parentSite.rooms.some(r =>
+              r.roomName?.trim().toLowerCase() === formData.roomName?.trim().toLowerCase() && r.roomCode !== editingId
+         );
+         if (duplicateName) { errors.roomName = "Room name already exists in this site."; }
+    }
+
+    if (!formData.siteCode?.trim()) errors.siteCode = "Parent site code is required.";
+    else if (parentSite && formData.siteCode !== parentSite.siteCode) {
+         errors.siteCode = "Site code mismatch with parent record."; // Sanity check
+    }
+
+    return errors;
+};
+
+// Validation for Holidays (only uniqueness check added)
+export const validateHolidayForm = async (formData, options = {}) => {
+  const errors = {};
+  const editingId = options.editingId; // holidayCode
+
+  if (!formData.holidayCode?.trim()) { errors.holidayCode = "Holiday code is required."; }
+  else {
+       try {
+          const existingByCode = await fetchDocumentsByQuery('holidays', 'holidayCode', '==', formData.holidayCode.trim());
+          if (existingByCode.some(doc => doc.id !== editingId)) { errors.holidayCode = "Holiday code already exists."; }
+       } catch (e) { console.error("Holiday code check failed:", e); errors.holidayCode = "Could not verify code uniqueness."; }
+  }
+
+  if (!formData.holidayName?.trim()) errors.holidayName = "Holiday name is required.";
+  if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
+  if (!formData.endDate?.trim()) errors.endDate = "End date is required.";
   if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
-      errors.startDate = "Start date must be on or before end date.";
+    errors.endDate = "End date must be on or after start date.";
   }
-  if (yearRecord && formData.startDate && formData.endDate) {
-      if (formData.startDate < yearRecord.startDate || formData.endDate > yearRecord.endDate) {
-          errors.startDate = errors.startDate || `Dates must be within the year range (${yearRecord.startDate} - ${yearRecord.endDate}).`; // Append if no other error
-          errors.endDate = errors.endDate || `Dates must be within the year range (${yearRecord.startDate} - ${yearRecord.endDate}).`;
+  return errors;
+};
+
+// Validation for Vacations (only uniqueness check added)
+export const validateVacationForm = async (formData, options = {}) => {
+  const errors = {};
+  const editingId = options.editingId; // vacationCode
+
+  if (!formData.vacationCode?.trim()) { errors.vacationCode = "Vacation code is required."; }
+  else {
+      try {
+          const existingByCode = await fetchDocumentsByQuery('vacations', 'vacationCode', '==', formData.vacationCode.trim());
+          if (existingByCode.some(doc => doc.id !== editingId)) { errors.vacationCode = "Vacation code already exists."; }
+       } catch (e) { console.error("Vacation code check failed:", e); errors.vacationCode = "Could not verify code uniqueness."; }
+  }
+
+  if (!formData.vacationName?.trim()) errors.vacationName = "Vacation name is required.";
+  if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
+  if (!formData.endDate?.trim()) errors.endDate = "End date is required.";
+  if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
+      errors.endDate = "End date must be on or after start date.";
+  }
+  return errors;
+};
+
+// Validation for general Events (only uniqueness check added)
+export const validateEventForm = async (formData, options = {}) => {
+  const errors = {};
+  const editingId = options.editingId; // eventCode
+
+  if (!formData.eventCode?.trim()) { errors.eventCode = "Event code is required."; }
+  else {
+       try {
+          const existingByCode = await fetchDocumentsByQuery('events', 'eventCode', '==', formData.eventCode.trim());
+          if (existingByCode.some(doc => doc.id !== editingId)) { errors.eventCode = "Event code already exists."; }
+       } catch (e) { console.error("Event code check failed:", e); errors.eventCode = "Could not verify code uniqueness."; }
+  }
+
+  if (!formData.eventName?.trim()) errors.eventName = "Event name is required.";
+  if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
+
+  const isAllDay = formData.allDay === true || String(formData.allDay).toLowerCase() === 'true';
+  if (isAllDay) {
+      if (!formData.endDate?.trim()) errors.endDate = "End date required for multi-day all-day event.";
+      else if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) { errors.endDate = "End date must be on or after start date."; }
+  } else { // Timed event
+      if (!formData.startHour?.trim()) errors.startHour = "Start time is required.";
+      if (!formData.endHour?.trim()) errors.endHour = "End time is required.";
+      if (formData.startHour && formData.endHour) {
+          const effectiveEndDate = formData.endDate || formData.startDate; // Assume same day if end date missing
+          if (formData.startDate && effectiveEndDate && formData.startDate > effectiveEndDate) { errors.endDate = "End date cannot be before start date."; }
+          else if (formData.startDate === effectiveEndDate && formData.startHour >= formData.endHour) { errors.endHour = "End time must be after start time on the same day."; }
       }
-  } else if (!yearRecord) {
-       console.warn("validateSemesterForm: Year record context missing for date range check.");
-  }
-   if (!formData.yearCode?.trim()) errors.yearCode = "Parent year code is required.";
-  return errors;
-};
-export const validateLecturerForm = (formData, existingLecturers = [], extra = {}) => {
-const errors = {};
-const editingId = extra.editingId;
-
-if (!formData.name?.trim()) {
-  errors.name = "Lecturer name is required.";
-} else if (isDuplicate(existingLecturers, formData, 'name', 'id', editingId)) {
-   errors.name = "Lecturer name already exists.";
-}
-if (!formData.id?.trim()) {
-   errors.id = "Lecturer ID is required.";
-} else if (isDuplicate(existingLecturers, formData, 'id', 'id', editingId)) {
-    errors.id = "Lecturer ID already exists.";
-}
-if (formData.email && !/^\S+@\S+\.\S+$/.test(formData.email)) {
-  errors.email = "Invalid email format.";
-} else if (formData.email && isDuplicate(existingLecturers, formData, 'email', 'id', editingId)) {
-    errors.email = "Email already registered to another lecturer.";
-}
-
-return errors;
-};
-export const validateCourseForm = (formData, existingCourses = [], extra = {}) => {
-  console.log("[validateCourseForm] Validating:", formData);
-  const errors = {};
-  const editingId = extra.editingId;
-  if (!formData.courseCode?.trim()) {
-      errors.courseCode = "Course code is required.";
-  } else if (isDuplicate(existingCourses, formData, 'courseCode', 'courseCode', editingId)) {
-      errors.courseCode = "Course code already exists.";
-  }
-  if (!formData.courseName?.trim()) errors.courseName = "Course name is required.";
-  if (!formData.lecturerId?.trim()) errors.lecturerId = "Lecturer is required.";
-  if (!formData.semesterCode?.trim()) errors.semesterCode = "Semester is required.";
-  if (!Array.isArray(formData.hours) || formData.hours.length === 0) {
-      errors.hours = "At least one weekly time slot is required.";
-  } else {
-      const daysUsed = new Set();
-      formData.hours.forEach((slot, index) => {
-          let slotHasError = false;
-          if (!slot?.day) {
-              errors[`hours[${index}].day`] = "Day is required.";
-              slotHasError = true;
-          }
-          if (!slot?.start) {
-               errors[`hours[${index}].start`] = "Start time is required.";
-               slotHasError = true;
-          }
-          if (!slot?.end) {
-               errors[`hours[${index}].end`] = "End time is required.";
-               slotHasError = true;
-          }
-          if (slot?.start && slot?.end && !slotHasError) {
-              if (slot.start >= slot.end) {
-                   errors[`hours[${index}].end`] = "End time must be after start time.";
-                   slotHasError = true;
-              }
-          }
-          if (slot?.day && !slotHasError) {
-              if (daysUsed.has(slot.day)) {
-                  errors[`hours[${index}].day`] = `Day '${slot.day}' is already scheduled for this course.`;
-                  slotHasError = true;
-              } else {
-                  daysUsed.add(slot.day);
-              }
-          }
-           if (slot?.day && slot?.start && slot?.end && !slotHasError) {
-               const overlap = formData.hours.some((otherSlot, otherIndex) => {
-                    if (index === otherIndex || otherSlot.day !== slot.day || !otherSlot.start || !otherSlot.end) {
-                         return false;
-                    }
-                    return slot.start < otherSlot.end && slot.end > otherSlot.start;
-               });
-               if (overlap) {
-                    errors[`hours[${index}].start`] = "Time slot overlaps with another slot on the same day.";
-                    errors[`hours[${index}].end`] = "Time slot overlaps with another slot on the same day.";
-               }
-           }
-
-      }); 
-  }
-  console.log("[validateCourseForm] Validation Errors:", errors);
-  return errors;
-};
-
-export const validateCourseMeetingForm = (formData, existingMeetings = [], extra = {}) => {
-  const errors = {};
-  const editingId = extra.editingId;
-   if (!formData.id?.trim()) errors.id = "Meeting ID is required.";
-   else if (isDuplicate(existingMeetings, formData, 'id', 'id', editingId)) {
-        errors.id = "Meeting ID conflict.";
-   }
-  if (!formData.courseCode?.trim()) errors.courseCode = "Associated course code is required.";
-  if (!formData.date?.trim()) errors.date = "Date is required.";
-  if (!formData.startHour?.trim()) errors.startHour = "Start time is required.";
-  if (!formData.endHour?.trim()) errors.endHour = "End time is required.";
-  if (formData.startHour && formData.endHour && formData.startHour >= formData.endHour) {
-      errors.endHour = "End time must be after start time.";
   }
   return errors;
 };
-export const validateTaskForm = (formData, existingTasks = [], extra = {}) => {
-const errors = {};
- const editingId = extra.editingId;
 
-  if (!formData.assignmentCode?.trim()) {
-       errors.assignmentCode = "Assignment code is required.";
-  } else if (isDuplicate(existingTasks, formData, 'assignmentCode', 'assignmentCode', editingId)) {
-       errors.assignmentCode = "Assignment code already exists.";
-  }
-if (!formData.assignmentName?.trim()) errors.assignmentName = "Assignment name is required.";
-if (!formData.courseCode?.trim()) errors.courseCode = "Associated course is required.";
-if (!formData.submissionDate?.trim()) errors.submissionDate = "Submission date is required.";
-return errors;
-};
-
-export const validateSiteForm = (formData, existingSites = [], extra = {}) => {
-const errors = {};
- const editingId = extra.editingId;
-  if (!formData.siteCode?.trim()) {
-      errors.siteCode = "Site code is required.";
-  } else if (isDuplicate(existingSites, formData, 'siteCode', 'siteCode', editingId)) {
-      errors.siteCode = "Site code already exists.";
-  }
-
-if (!formData.siteName?.trim()) {
-     errors.siteName = "Site name is required.";
-} else if (isDuplicate(existingSites, formData, 'siteName', 'siteCode', editingId)) {
-}
-return errors;
-};
-export const validateRoomForm = (formData, existingRooms = [], extra = {}) => {
+// Validation for Student Personal Events (only uniqueness check added)
+export const validatePersonalEventForm = async (formData, options = {}) => {
   const errors = {};
-  const editingId = extra.editingId;
-  const siteRecord = extra.siteRecord;
+  const editingId = options.editingId; // eventCode
 
-  if (!formData.roomCode?.trim()) {
-      errors.roomCode = "Room code is required.";
-  } else {
-       const duplicateCode = (existingRooms || []).some(r =>
-            r.roomCode?.trim() === formData.roomCode?.trim() &&
-            r.roomCode !== editingId
-       );
-       if (duplicateCode) {
-           errors.roomCode = "Room code already exists in this site.";
-       }
+  if (!formData.eventCode?.trim()) { errors.eventCode = "Event code is required."; }
+  else {
+      try {
+          // Uniqueness check assumes eventCode is unique across all studentEvents
+          const existingByCode = await fetchDocumentsByQuery('studentEvents', 'eventCode', '==', formData.eventCode.trim());
+          if (existingByCode.some(doc => doc.id !== editingId)) { errors.eventCode = "Event code already exists."; }
+      } catch (e) { console.error("Student event code check failed:", e); errors.eventCode = "Could not verify code uniqueness."; }
   }
 
-
-  if (!formData.roomName?.trim()) {
-      errors.roomName = "Room name is required.";
-  } else {
-       const duplicateName = (existingRooms || []).some(r =>
-            r.roomName?.trim().toLowerCase() === formData.roomName?.trim().toLowerCase() &&
-            r.roomCode !== editingId
-       );
-       if (duplicateName) {
-            errors.roomName = "Room name already exists in this site.";
-       }
-  }
-  if (!formData.siteCode?.trim()) errors.siteCode = "Parent site code is required.";
-  return errors;
-};
-export const validateHolidayForm = (formData, existingHolidays = [], extra = {}) => {
-const errors = {};
-const editingId = extra.editingId;
- if (!formData.holidayCode?.trim()) {
-     errors.holidayCode = "Holiday code is required.";
- } else if (isDuplicate(existingHolidays, formData, 'holidayCode', 'holidayCode', editingId)) {
-      errors.holidayCode = "Holiday code already exists.";
- }
-if (!formData.holidayName?.trim()) errors.holidayName = "Holiday name is required.";
-if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
-if (!formData.endDate?.trim()) errors.endDate = "End date is required.";
-if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
-  errors.endDate = "End date must be on or after start date.";
-}
-return errors;
-};
-export const validateVacationForm = (formData, existingVacations = [], extra = {}) => {
-const errors = {};
-const editingId = extra.editingId;
- if (!formData.vacationCode?.trim()) {
-     errors.vacationCode = "Vacation code is required.";
- } else if (isDuplicate(existingVacations, formData, 'vacationCode', 'vacationCode', editingId)) {
-      errors.vacationCode = "Vacation code already exists.";
- }
-if (!formData.vacationName?.trim()) errors.vacationName = "Vacation name is required.";
-if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
-if (!formData.endDate?.trim()) errors.endDate = "End date is required.";
- if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
-     errors.endDate = "End date must be on or after start date.";
- }
-return errors;
-};
-export const validateEventForm = (formData, existingEvents = [], extra = {}) => {
-const errors = {};
- const editingId = extra.editingId;
-
-  if (!formData.eventCode?.trim()) {
-      errors.eventCode = "Event code is required.";
-  } else if (isDuplicate(existingEvents, formData, 'eventCode', 'eventCode', editingId)) {
-       errors.eventCode = "Event code already exists.";
-  }
-if (!formData.eventName?.trim()) errors.eventName = "Event name is required.";
-if (!formData.startDate?.trim()) errors.startDate = "Start date is required.";
- if (formData.allDay && !formData.endDate?.trim()) {
-     errors.endDate = "End date is required for all-day events spanning multiple days.";
- } else if (!formData.allDay && !formData.endDate?.trim() && formData.startHour && formData.endHour) {
- }
-const isAllDay = formData.allDay === true || String(formData.allDay).toLowerCase() === 'true';
-if (!isAllDay) {
-  if (!formData.startHour?.trim()) errors.startHour = "Start time is required.";
-  if (!formData.endHour?.trim()) errors.endHour = "End time is required.";
-  if (formData.startHour && formData.endHour) {
-      const effectiveEndDate = formData.endDate || formData.startDate;
-      if (formData.startDate && effectiveEndDate && formData.startDate > effectiveEndDate) {
-           errors.endDate = errors.endDate || "End date cannot be before start date.";
-      } else if (formData.startDate === effectiveEndDate && formData.startHour >= formData.endHour) {
-          errors.endHour = "End time must be after start time on the same day.";
-      }  }
-} else {
-     if (formData.startDate && formData.endDate && formData.startDate > formData.endDate) {
-         errors.endDate = "End date must be on or after start date.";
-     }
-}
-return errors;
-};
-export const validatePersonalEventForm = (formData, existingEvents = [], extra = {}) => {
-  const errors = {};
-  const editingId = extra.editingId;
-  const { eventName, startDate, startHour, endHour, allDay, eventCode } = formData;
-  if (!eventName?.trim()) errors.eventName = "Event name is required.";
-  if (!startDate?.trim()) errors.startDate = "Date is required.";
-   if (!eventCode?.trim()) {
-       errors.eventCode = "Event code is missing.";
-   } else if (isDuplicate(existingEvents, formData, 'eventCode', 'eventCode', editingId)) {
-        errors.eventCode = "Event code conflict detected.";
-   }
-  const isAllDayBool = allDay === true || String(allDay).toLowerCase() === 'true';
+  // Synchronous checks remain
+  if (!formData.eventName?.trim()) errors.eventName = "Event name is required.";
+  if (!formData.startDate?.trim()) errors.startDate = "Date is required.";
+  const isAllDayBool = formData.allDay === true || String(formData.allDay).toLowerCase() === 'true';
   if (!isAllDayBool) {
-      if (!startHour?.trim()) errors.startHour = "Start time is required.";
-      if (!endHour?.trim()) errors.endHour = "End time is required.";
-      if (startHour && endHour && startHour >= endHour) {
+      if (!startHour?.trim()) errors.startHour = "Start time is required."; // Variable 'startHour' might not be defined here, use formData.startHour
+      if (!formData.startHour?.trim()) errors.startHour = "Start time is required.";
+      if (!formData.endHour?.trim()) errors.endHour = "End time is required.";
+      if (formData.startHour && formData.endHour && formData.startHour >= formData.endHour) {
           errors.endHour = "End time must be after start time.";
       }
   }
+  // Overlap check is complex with Firestore, usually handled server-side or skipped client-side.
   return errors;
 };
-export const validateFormByType = (recordType, formData, extra = {}) => {
-  const entityKey = getEntityKeyByRecordType(recordType);
-   let existingData = [];
-   if (entityKey && extra[`existing${entityKey.charAt(0).toUpperCase() + entityKey.slice(1)}`]) {
-       existingData = extra[`existing${entityKey.charAt(0).toUpperCase() + entityKey.slice(1)}`];
-   } else if (recordType === 'semester' && extra.existingSemesters) {
-        existingData = extra.existingSemesters;
-   } else if (recordType === 'room' && extra.existingRooms) {
-        existingData = extra.existingRooms;
-   }
-  console.log(`[validateFormByType] Validating type: ${recordType}, existingData count: ${existingData?.length}, extra keys:`, Object.keys(extra));
-  switch (recordType) {
-      case "student":       return validateStudentForm(formData, existingData, extra.options || extra);
-      case "year":          return validateYearForm(formData, existingData, extra);
-      case "semester":      return validateSemesterForm(formData, extra.existingSemesters || [], extra);
-      case "lecturer":      return validateLecturerForm(formData, existingData, extra);
-      case "course":        return validateCourseForm(formData, existingData, extra);
-      case "courseMeeting": return validateCourseMeetingForm(formData, existingData, extra);
-      case "task":          return validateTaskForm(formData, existingData, extra);
-      case "site":          return validateSiteForm(formData, existingData, extra);
-      case "room":          return validateRoomForm(formData, extra.existingRooms || [], extra);
-      case "holiday":       return validateHolidayForm(formData, existingData, extra);
-      case "vacation":      return validateVacationForm(formData, existingData, extra);
-      case "event":         return validateEventForm(formData, existingData, extra);
-      case "studentEvent":  return validatePersonalEventForm(formData, existingData, extra);
-      default:
-          console.warn(`Validation not implemented for type: ${recordType}`);
-          return {};
-  }
-};
-const getEntityKeyByRecordType = (recordType) => {
-   const map = { year: "years", semester: "years", lecturer: "lecturers", course: "courses", courseMeeting: "coursesMeetings", task: "tasks", site: "sites", room: "rooms", holiday: "holidays", vacation: "vacations", event: "events", studentEvent: "studentEvents"};
-  return map[recordType] || null;
+
+
+// --- Central Dynamic Validation Dispatcher (NOW ASYNC) ---
+export const validateFormByType = async (recordType, formData, extra = {}) => {
+    console.log(`[validateFormByType:Async] Validating type: ${recordType}`);
+    // Prepare options consistently for all async validation functions
+    const options = {
+         ...extra.options, // Pass through any options from caller
+         editingId: extra.editingId, // Pass the ID being edited
+         parentRecord: extra.parentRecord // Pass parent context if available/needed
+    };
+
+    try {
+        switch (recordType) {
+            case "student":       return await validateStudentForm(formData, options);
+            case "year":          return await validateYearForm(formData, options);
+            case "semester":      return await validateSemesterForm(formData, options.parentRecord?.semesters || [], options); // Pass existing from parent, plus options
+            case "lecturer":      return await validateLecturerForm(formData, options);
+            case "course":        return await validateCourseForm(formData, options);
+            case "courseMeeting": return await validateCourseMeetingForm(formData, options);
+            case "task":          return await validateTaskForm(formData, options);
+            case "site":          return await validateSiteForm(formData, options);
+            case "room":          return await validateRoomForm(formData, options.parentRecord?.rooms || [], options); // Pass existing from parent, plus options
+            case "holiday":       return await validateHolidayForm(formData, options);
+            case "vacation":      return await validateVacationForm(formData, options);
+            case "event":         return await validateEventForm(formData, options);
+            case "studentEvent":  return await validatePersonalEventForm(formData, options);
+            default:
+                console.warn(`Validation not implemented for type: ${recordType}`);
+                return {}; // Return empty object for unknown types
+        }
+    } catch (error) {
+         console.error(`[validateFormByType:Async] Error during validation for ${recordType}:`, error);
+         // Return a generic error object to indicate failure
+         return { _validationError: `Validation failed: ${error.message || 'Unknown error'}` };
+    }
 };

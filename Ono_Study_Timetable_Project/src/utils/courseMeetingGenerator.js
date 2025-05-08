@@ -1,176 +1,149 @@
-// src/utils/courseMeetingGenerator.js
+import { dayMap } from "../data/dummyData"; // Keep dayMap for day conversion
+// Import Firestore service functions and DB instance
+import { getFirestore, collection, query, where, getDocs, writeBatch, doc, deleteDoc } from "firebase/firestore";
+import { db } from "../firebase/firebaseConfig";
+import { fetchCollection, fetchDocumentById } from "../firebase/firestoreService"; // Use helpers
 
-import { dayMap } from "../data/dummyData";
-import { getRecords, saveRecords } from "./storage";
-
+// Helper function to check if a date falls within any blocked range (remains the same)
 const isDateBlocked = (date, blockedRanges) => {
   if (!blockedRanges || blockedRanges.length === 0) return false;
   const dateString = date.toISOString().slice(0, 10);
-  return blockedRanges.some(({ startDate, endDate }) => {
-    if (!startDate || !endDate) return false;
-    return dateString >= startDate && dateString <= endDate;
-  });
+  return blockedRanges.some(({ startDate, endDate }) => startDate && endDate && dateString >= startDate && dateString <= endDate);
 };
 
-/**
- * @param {object} courseDefinition
- * @param {object} Semester
- * @param {array} holidaysAndVacations
- * @returns {array}
- */
+// Generate course meeting objects in memory (logic remains the same)
 export const generateCourseMeetings = (courseDefinition, semester, holidaysAndVacations = []) => {
-  console.log(`[Generator] Generating meetings for Course: ${courseDefinition?.courseCode} in Semester: ${semester?.semesterCode}`);
   const meetings = [];
-  if (!courseDefinition || !courseDefinition.courseCode || !courseDefinition.hours || !Array.isArray(courseDefinition.hours) || courseDefinition.hours.length === 0) {
-    console.error("[Generator] Invalid or incomplete courseDefinition provided:", courseDefinition);
-    return [];
-  }
-  if (!semester || !semester.semesterCode || !semester.startDate || !semester.endDate) {
-     console.error("[Generator] Invalid or incomplete semester data provided:", semester);
-     return [];
-  }
-  if (courseDefinition.semesterCode !== semester.semesterCode) {
-      console.error(`[Generator] Mismatch: Course ${courseDefinition.courseCode} is for semester ${courseDefinition.semesterCode}, but trying to generate for ${semester.semesterCode}.`);
-      return [];
-  }
+  if (!courseDefinition?.courseCode || !Array.isArray(courseDefinition.hours) || courseDefinition.hours.length === 0) return meetings;
+  if (!semester?.semesterCode || !semester.startDate || !semester.endDate) return meetings;
+  if (courseDefinition.semesterCode !== semester.semesterCode) return meetings;
+
   try {
     const semesterStart = new Date(semester.startDate + 'T00:00:00Z');
     const semesterEnd = new Date(semester.endDate + 'T00:00:00Z');
-    if (isNaN(semesterStart.getTime()) || isNaN(semesterEnd.getTime())) {
-       console.error("[Generator] Invalid semester start or end date format:", semester.startDate, semester.endDate);
-       return [];
-    }
-    if (semesterStart > semesterEnd) {
-        console.error("[Generator] Semester start date is after end date.");
-        return [];
-    }
-    console.log(`[Generator] Iterating from ${semesterStart.toISOString()} to ${semesterEnd.toISOString()}`);
-    let meetingCounter = 0;
+    if (isNaN(semesterStart.getTime()) || isNaN(semesterEnd.getTime()) || semesterStart > semesterEnd) return meetings;
+
     let currentDate = new Date(semesterStart);
     while (currentDate <= semesterEnd) {
-      const currentDayString = currentDate.toISOString().slice(0, 10);
-      const currentDayOfWeekUTC = currentDate.getUTCDay();
-      const currentDayName = Object.keys(dayMap).find(key => dayMap[key] === currentDayOfWeekUTC);
-      if (currentDayName) {
-        const matchingSlots = courseDefinition.hours.filter(h => h.day === currentDayName && h.start && h.end);
-        if (matchingSlots.length > 0) {
-          if (!isDateBlocked(currentDate, holidaysAndVacations)) {
-            matchingSlots.forEach(slot => {
-              const meetingId = `CM-${courseDefinition.courseCode}-${currentDayString}-${slot.start.replace(':', '')}`;
-              meetings.push({
-                id: meetingId,
-                courseCode: courseDefinition.courseCode,
-                courseName: courseDefinition.courseName || "", 
-                type: "courseMeeting",
-                date: currentDayString,
-                startHour: slot.start,
-                endHour: slot.end,
-                allDay: false,
-                semesterCode: semester.semesterCode,
-                lecturerId: courseDefinition.lecturerId || null,
-                roomCode: courseDefinition.roomCode || null,
-                notes: courseDefinition.notes || "",
-                zoomMeetinglink: courseDefinition.zoomMeetinglink || "",
-              });
-              meetingCounter++;
-            });
-          } else {
-          }
-        }
+      const dateStr = currentDate.toISOString().slice(0, 10);
+      const jsDay = currentDate.getUTCDay();
+      const weekDay = Object.keys(dayMap).find(key => dayMap[key] === jsDay);
+
+      if (weekDay && !isDateBlocked(currentDate, holidaysAndVacations)) {
+        const matchingSlots = courseDefinition.hours.filter(h => h.day === weekDay && h.start && h.end);
+        matchingSlots.forEach(slot => {
+          const meetingId = `CM-${courseDefinition.courseCode}-${dateStr}-${slot.start.replace(':', '')}`;
+          meetings.push({
+            id: meetingId, courseCode: courseDefinition.courseCode, courseName: courseDefinition.courseName || "",
+            type: "courseMeeting", date: dateStr, startHour: slot.start, endHour: slot.end, allDay: false,
+            semesterCode: semester.semesterCode, lecturerId: courseDefinition.lecturerId || null,
+            roomCode: courseDefinition.roomCode || null, notes: courseDefinition.notes || "",
+            zoomMeetinglink: courseDefinition.zoomMeetinglink || "",
+          });
+        });
       }
       currentDate.setUTCDate(currentDate.getUTCDate() + 1);
     }
-
-    console.log(`[Generator] Generated ${meetingCounter} meetings for ${courseDefinition.courseCode}.`);
-
-  } catch (error) {
-    console.error(`[Generator] Error during meeting generation for ${courseDefinition?.courseCode}:`, error);
-    return []; 
-  }
-
+  } catch (error) { console.error(`[Generator] Error generating meetings for ${courseDefinition?.courseCode}:`, error); return []; }
+  console.log(`[Generator] Generated ${meetings.length} meetings in memory for ${courseDefinition.courseCode}.`);
   return meetings;
 };
 
+
+// --- Firestore Interaction Functions ---
+
 /**
- * @param {string} courseCode
- * @returns {boolean}
+ * Deletes all meetings for a specific course from Firestore using a batch delete.
+ * @param {string} courseCode - The course code.
+ * @returns {Promise<boolean>} True on success, false on failure.
  */
-export const regenerateMeetingsForCourse = (courseCode) => {
-    console.log(`[Generator:Regenerate] Starting regeneration for course: ${courseCode}`);
-    if (!courseCode) {
-        console.error("[Generator:Regenerate] Course code is required.");
-        return false;
-    }
-
+export const deleteMeetingsForCourseFirestore = async (courseCode) => {
+    if (!courseCode) return false;
+    console.log(`[Generator:DeleteFirestore] Deleting meetings for course ${courseCode}...`);
+    const meetingsCollectionRef = collection(db, "coursesMeetings");
+    // Query for all meetings matching the course code
+    const q = query(meetingsCollectionRef, where("courseCode", "==", courseCode));
     try {
-        const courses = getRecords("courses") || [];
-        const courseDef = courses.find(c => c.courseCode === courseCode);
-        if (!courseDef) {
-             console.error(`[Generator:Regenerate] Course definition for ${courseCode} not found.`);
-             return false;
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+            console.log(`[Generator:DeleteFirestore] No existing meetings found for ${courseCode}.`);
+            return true; // Nothing to delete, considered success
         }
-        const years = getRecords("years") || [];
-        let semesterData = null;
-        for (const year of years) {
-             const foundSemester = (year.semesters || []).find(s => s.semesterCode === courseDef.semesterCode);
-             if (foundSemester) {
-                 semesterData = foundSemester;
-                 break;
-             }
-        }
-        if (!semesterData) {
-             console.error(`[Generator:Regenerate] Semester data for ${courseDef.semesterCode} (course ${courseCode}) not found.`);
-             return false;
-        }
-        const holidays = getRecords("holidays") || [];
-        const vacations = getRecords("vacations") || [];
-        const blockedRanges = [...holidays, ...vacations];
-        const newMeetings = generateCourseMeetings(courseDef, semesterData, blockedRanges);
-        const allMeetings = getRecords("coursesMeetings") || [];
-        const otherMeetings = allMeetings.filter(m => m.courseCode !== courseCode);
-        const updatedMeetingList = [...otherMeetings, ...newMeetings];
-        const success = saveRecords("coursesMeetings", updatedMeetingList);
-        if (success) {
-            console.log(`[Generator:Regenerate] Successfully regenerated and saved ${newMeetings.length} meetings for course ${courseCode}.`);
-        } else {
-            console.error(`[Generator:Regenerate] Failed to save updated meeting list for course ${courseCode}.`);
-        }
-        return success;
-
+        // Create a batch write operation
+        const batch = writeBatch(db);
+        snapshot.docs.forEach(docSnapshot => {
+            batch.delete(docSnapshot.ref); // Add each document deletion to the batch
+        });
+        // Commit the batch
+        await batch.commit();
+        console.log(`[Generator:DeleteFirestore] Successfully deleted ${snapshot.size} meetings for ${courseCode}.`);
+        return true;
     } catch (error) {
-        console.error(`[Generator:Regenerate] Error during regeneration for course ${courseCode}:`, error);
+        console.error(`[Generator:DeleteFirestore] Error deleting meetings for ${courseCode}:`, error);
         return false;
     }
 };
 
 /**
- @param {string} courseCode
- @returns {boolean}
+ * Regenerates and saves meetings for a specific course to Firestore.
+ * Fetches required data from Firestore, generates meetings, deletes old ones, and saves new ones.
+ * @param {string} courseCode - The course code.
+ * @returns {Promise<boolean>} True on success, false on failure.
  */
-export const deleteMeetingsForCourse = (courseCode) => {
-     console.log(`[Generator:DeleteMeetings] Deleting meetings for course: ${courseCode}`);
-     if (!courseCode) {
-         console.error("[Generator:DeleteMeetings] Course code is required.");
-         return false;
-     }
-     try {
-          const allMeetings = getRecords("coursesMeetings") || [];
-          const meetingsToKeep = allMeetings.filter(m => m.courseCode !== courseCode);
+export const regenerateMeetingsForCourse = async (courseCode) => {
+    if (!courseCode) return false;
+    console.log(`[Generator:RegenerateFirestore] Regenerating meetings for course: ${courseCode}`);
+    try {
+        // 1. Fetch necessary data from Firestore
+        const courseDef = await fetchDocumentById("courses", courseCode);
+        if (!courseDef) throw new Error(`Course definition ${courseCode} not found.`);
 
-          if (meetingsToKeep.length === allMeetings.length) {
-              console.warn(`[Generator:DeleteMeetings] No meetings found for course ${courseCode}. No changes made.`);
-              return true;
-          }
+        const years = await fetchCollection("years");
+        const semesterData = years.flatMap(y => y.semesters || []).find(s => s.semesterCode === courseDef.semesterCode);
+        if (!semesterData) throw new Error(`Semester ${courseDef.semesterCode} not found.`);
 
-          const success = saveRecords("coursesMeetings", meetingsToKeep);
-           if (success) {
-               console.log(`[Generator:DeleteMeetings] Successfully deleted meetings for course ${courseCode}.`);
-           } else {
-               console.error(`[Generator:DeleteMeetings] Failed to save meeting list after deleting for course ${courseCode}.`);
-           }
-           return success;
-     } catch (error) {
-          console.error(`[Generator:DeleteMeetings] Error during meeting deletion for course ${courseCode}:`, error);
-          return false;
-     }
+        const holidays = await fetchCollection("holidays");
+        const vacations = await fetchCollection("vacations");
+        const blockedRanges = [...(holidays || []), ...(vacations || [])];
+
+        // 2. Generate new meetings in memory
+        const newMeetings = generateCourseMeetings(courseDef, semesterData, blockedRanges);
+
+        // 3. Delete existing meetings for this course
+        const deleteSuccess = await deleteMeetingsForCourseFirestore(courseCode);
+        if (!deleteSuccess) {
+            // Don't proceed if deletion failed
+            throw new Error(`Failed to delete existing meetings for ${courseCode} before regenerating.`);
+        }
+
+        // 4. Write new meetings using batch write
+        if (newMeetings.length > 0) {
+            const batch = writeBatch(db);
+            const meetingsCollectionRef = collection(db, "coursesMeetings");
+            newMeetings.forEach(meeting => {
+                if (meeting.id) {
+                    // Create a reference using the generated meeting ID
+                    const docRef = doc(meetingsCollectionRef, meeting.id);
+                    batch.set(docRef, meeting); // Use set to create/overwrite
+                } else {
+                    console.warn("[Generator:RegenerateFirestore] Skipping meeting without ID:", meeting);
+                }
+            });
+            await batch.commit();
+            console.log(`[Generator:RegenerateFirestore] Successfully wrote ${newMeetings.length} new meetings for ${courseCode}.`);
+        } else {
+            console.log(`[Generator:RegenerateFirestore] No new meetings generated for ${courseCode}.`);
+        }
+
+        return true; // Overall success
+
+    } catch (error) {
+        console.error(`[Generator:RegenerateFirestore] Error during regeneration for ${courseCode}:`, error);
+        return false;
+    }
+};
+
+// Keep the original delete function name, but implement it using the Firestore version
+export const deleteMeetingsForCourse = async (courseCode) => {
+     return deleteMeetingsForCourseFirestore(courseCode);
 };

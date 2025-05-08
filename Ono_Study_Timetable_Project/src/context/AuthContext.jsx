@@ -1,83 +1,94 @@
-// src/context/AuthContext.jsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { getRecords } from '../utils/storage';
+// Import Firebase auth functions and the listener
+import { onAuthStateChangedListener, signOutUser, getUserProfile } from '../firebase/authService'; // Adjust path
 
 const AuthContext = createContext(null);
-export const AuthProvider = ({ children }) => {
-  console.log("AuthProvider rendering...");
-  const [currentUser, setCurrentUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  useEffect(() => {
-    console.log("AuthProvider useEffect START");
-    try {
-      const loggedInUserId = localStorage.getItem('loggedInUserId');
-      console.log("AuthProvider useEffect - User ID from localStorage:", loggedInUserId);
-      if (loggedInUserId) {
-        const students = getRecords('students');
-        const user = students ? students.find(s => s.id === loggedInUserId) : null;
-        if (user) {
-          console.log("AuthProvider useEffect - User found, setting currentUser.");
-          setCurrentUser(user);
-        } else {
-          console.log("AuthProvider useEffect - User ID found but user invalid/missing, clearing localStorage & currentUser.");
-          localStorage.removeItem('loggedInUserId');
-          setCurrentUser(null);
-        }
-      } else {
-         console.log("AuthProvider useEffect - No user ID found, ensuring currentUser is null.");
-         if (currentUser !== null) {
-            setCurrentUser(null);
-         }
-      }
-    } catch (error) {
-        console.error("AuthProvider useEffect - ERROR:", error);
-        setCurrentUser(null);
-    } finally {
-        console.log("AuthProvider useEffect - FINALLY block reached.");
-        console.log("AuthProvider useEffect - Setting isLoading to false.");
-        setIsLoading(false);
-    }
-  }, []);
-  const login = (student) => {
-    console.log("AuthContext: login function called with student:", student);
-    if (student && student.id) {
-      console.log(`AuthContext: --- BEFORE calling setCurrentUser for student ID: ${student.id} ---`);
-      try {
-        setCurrentUser(student);
-        console.log(`AuthContext: --- AFTER calling setCurrentUser. State update should be queued. ---`);
 
-        console.log(`AuthContext: Setting loggedInUserId in localStorage to: ${student.id}`);
-        localStorage.setItem('loggedInUserId', student.id);
-        console.log("AuthContext: Successfully set localStorage.");
-      } catch (error) {
-        console.error("AuthContext: Error during login state/storage update:", error);
-      }
-    } else {
-      console.error("AuthContext: Login attempt with invalid or missing student data:", student);
-    }
-  };
-    const logout = () => {
-      console.log("AuthContext: logout function called.");
-      try {
-          console.log("AuthContext: Removing 'loggedInUserId' from localStorage.");
-          localStorage.removeItem('loggedInUserId');
-          console.log("AuthContext: Clearing 'currentUser' state.");
-          setCurrentUser(null);
-          console.log("AuthContext: Logout process complete in context.");
-      } catch (error) {
-          console.error("AuthContext: Error during logout (localStorage access?):", error);
-      }
+export const AuthProvider = ({ children }) => {
+    console.log("AuthProvider rendering...");
+    // currentUser will now hold the combined data from Auth and Firestore
+    const [currentUser, setCurrentUser] = useState(null);
+    // isLoading manages the initial auth state check
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Effect to listen for authentication state changes
+    useEffect(() => {
+        console.log("AuthProvider: Setting up auth state listener.");
+        // Subscribe to the listener, returns an unsubscribe function
+        const unsubscribe = onAuthStateChangedListener(async (userAuth) => {
+            console.log("[AuthProvider] Auth state changed. UserAuth:", userAuth ? userAuth.uid : null);
+            if (userAuth) {
+                // User is logged in (Firebase Auth)
+                try {
+                    // Fetch additional profile data from Firestore using the UID
+                    const userProfile = await getUserProfile(userAuth.uid);
+                    if (userProfile) {
+                        // Combine Auth data (uid, email) with Firestore profile data
+                        const combinedUserData = {
+                            ...userAuth, // Includes uid, email, emailVerified etc.
+                            ...userProfile, // Includes firstName, lastName, username, etc. (overwrites email if exists)
+                            // Ensure the final 'id' field matches the UID
+                            id: userAuth.uid
+                        };
+                        console.log("[AuthProvider] User profile found. Setting combined currentUser:", combinedUserData);
+                        setCurrentUser(combinedUserData);
+                    } else {
+                         // Auth user exists, but no profile found in Firestore (edge case?)
+                         console.warn(`[AuthProvider] User ${userAuth.uid} authenticated but profile not found in Firestore.`);
+                         // Decide how to handle: logout? set only auth data? set error?
+                         setCurrentUser(userAuth); // Set basic auth data for now
+                    }
+                } catch (error) {
+                    console.error("[AuthProvider] Error fetching user profile:", error);
+                    // Handle profile fetch error (e.g., maybe log user out?)
+                    setCurrentUser(null); // Log out on profile fetch error
+                }
+            } else {
+                // User is logged out
+                console.log("[AuthProvider] User logged out.");
+                setCurrentUser(null);
+            }
+            // Finished initial check or update, set loading to false
+            // Move setIsLoading(false) here to ensure it happens after async profile fetch
+            if (isLoading) {
+                 console.log("[AuthProvider] Initial auth check complete. Setting loading false.");
+                 setIsLoading(false);
+            }
+        });
+
+        // Cleanup function: Unsubscribe the listener when the component unmounts
+        return () => {
+             console.log("AuthProvider: Cleaning up auth state listener.");
+             unsubscribe();
+        };
+    }, []); // Empty dependency array means this runs only once on mount
+
+    // Logout function now calls the Firebase sign out utility
+    const logout = async () => {
+        console.log("AuthContext: logout function called.");
+        try {
+            await signOutUser();
+            console.log("AuthContext: Firebase sign out successful.");
+            // No need to manually set currentUser to null, the listener will do it
+        } catch (error) {
+            console.error("AuthContext: Error during sign out:", error);
+            // Handle potential sign out errors
+        }
     };
 
-  const value = { currentUser, isLoading, login, logout };
-  console.log(`AuthProvider rendering Provider with: isLoading=${isLoading}, currentUser=${JSON.stringify(currentUser)}`);
-  return (
-    <AuthContext.Provider value={value}>
-       {children}
-    </AuthContext.Provider>
-  );
+    // Value provided to consuming components
+    // Login is now handled by components calling authService directly
+    const value = { currentUser, isLoading, logout }; // Removed login from context value
+
+    console.log(`AuthProvider rendering Provider with: isLoading=${isLoading}, currentUser UID=${currentUser?.uid}`);
+    return (
+        <AuthContext.Provider value={value}>
+           {children}
+        </AuthContext.Provider>
+    );
 };
 
+// Custom hook remains the same
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) { throw new Error('useAuth must be used within an AuthProvider'); }
