@@ -4,7 +4,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getAllVisibleEvents } from '../utils/getAllVisibleEvents'; // Already Firestore-ready
 // ✅ Import fetchCollection
-import { fetchCollection } from '../utils/firestoreService'; // Assuming this path
+import { fetchCollection } from '../firebase/firestoreService'; // Assuming this path
 import { format, parseISO, compareAsc, isFuture, isToday, differenceInDays, startOfDay, endOfWeek, startOfWeek } from 'date-fns';
 // Icons
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
@@ -27,8 +27,6 @@ const StatCard = ({ title, value, icon }) => { /* ... */ };
 
 export default function DashboardPage() {
     const { currentUser } = useAuth();
-    const isAdmin = currentUser?.uid === 'YOUR_ADMIN_UID_HERE'; // Use UID for admin check
-
     const [upcomingEvents, setUpcomingEvents] = useState([]);
     const [upcomingTasks, setUpcomingTasks] = useState([]);
     const [stats, setStats] = useState({ studentCount: null, courseCount: null });
@@ -114,9 +112,6 @@ export default function DashboardPage() {
         <Box sx={{ flexGrow: 1, p: { xs: 2, sm: 3 }, maxWidth: '1200px', mx: 'auto' }}>
             <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 1 }}> Dashboard </Typography>
             <Typography variant="h6" component="p" sx={{ mb: 4, color: 'text.secondary' }}> Welcome back, {currentUser?.firstName || currentUser?.username || currentUser?.email || 'User'}! </Typography>
-
-            {/* Admin Stats Section */}
-            {isAdmin && (
                  <Box sx={{ mb: 4 }}>
                      <Typography variant="h6" component="div" sx={{ mb: 2 }}> System Overview </Typography>
                      <Grid container spacing={2}>
@@ -124,16 +119,12 @@ export default function DashboardPage() {
                           <StatCard title="Course Definitions" value={isLoading ? '...' : stats.courseCount} icon={SchoolIcon} />
                      </Grid>
                  </Box>
-            )}
-
-            {/* Quick Actions Section */}
             <Box sx={{ mb: 4 }}>
                  <Typography variant="h6" component="div" sx={{ mb: 2 }}> Quick Actions </Typography>
                  <Grid container spacing={3}>
                       <DashboardCard title="My Timetable" to="/timetable/calendar" icon={CalendarMonthIcon} description="View your personal schedule." />
                       {/* Adjusted to /timetable/calendar from /my-timetable if that's the correct student view path */}
-                      <DashboardCard title="List View" to="/timetable/list" icon={FormatListBulletedIcon} description="Upcoming items list." />
-                      {isAdmin && ( <> <DashboardCard title="Manage Timetable" to="/manage-timetable" icon={SettingsIcon} description="Administer timetable entries." /> <DashboardCard title="Manage Students" to="/manage-students" icon={SupervisedUserCircleIcon} description="Manage student accounts." /> </> )}
+                      ( <> <DashboardCard title="Manage Timetable" to="/manage-timetable" icon={SettingsIcon} description="Administer timetable entries." /> <DashboardCard title="Manage Students" to="/manage-students" icon={SupervisedUserCircleIcon} description="Manage student accounts." /> </> )
                       <DashboardCard title="Help & Support" to="/help" icon={HelpOutlineIcon} description="Find answers and guides." />
                  </Grid>
             </Box>

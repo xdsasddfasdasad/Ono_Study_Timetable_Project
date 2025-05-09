@@ -102,7 +102,7 @@ export default function HomePage() {
     return (
         <Box sx={{ flexGrow: 1, p: { xs: 2, sm: 3 }, maxWidth: '1200px', mx: 'auto' }}>
             <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 1 }}>
-                Welcome, {currentUser.firstName || currentUser.username || currentUser.email}!
+                Welcome, {currentUser?.firstName || currentUser?.username || currentUser?.email || 'Guest'}!
             </Typography>
             <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 5 }}>
                 Your central hub for managing your schedule.

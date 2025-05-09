@@ -4,7 +4,7 @@ import { Add as AddIcon, Settings as SettingsIcon, School as SchoolIcon } from '
 import FullCalendarView from "../../components/calendar/FullCalendarView";
 import TimeTableCalendarManageModal from "../../components/modals/TimeTableCalendarManageModal";
 import ManageCourseDefinitionModal from "../../components/modals/ManageCourseDefinitionModal";
-import { fetchCollection } from "../../utils/firestoreService"; // Use Firestore service
+import { fetchCollection } from "../../firebase/firestoreService"; // Use Firestore service
 import { formatDateTime, getExclusiveEndDate } from '../../utils/eventFormatters';
 
 // --- Helper Function to fetch and create Lecturers Map (Async) ---

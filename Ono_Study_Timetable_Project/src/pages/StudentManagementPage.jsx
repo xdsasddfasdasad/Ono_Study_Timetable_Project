@@ -5,9 +5,9 @@ import {
 } from "@mui/material";
 import { Delete, Edit, Add as AddIcon } from "@mui/icons-material";
 // ✅ Import Firestore service functions
-import { fetchCollection, deleteDocument } from "../../utils/firestoreService"; // Adjust path if needed
+import { fetchCollection, deleteDocument } from "../firebase/firestoreService"; // Adjust path if needed
 // ✅ StudentFormModal now handles its own save logic via Firestore-ready handlers
-import StudentFormModal from "../../components/modals/StudentFormModal";
+import StudentFormModal from "../components/modals/StudentFormModal";
 
 export default function StudentManagementPage() {
   const [students, setStudents] = useState([]);

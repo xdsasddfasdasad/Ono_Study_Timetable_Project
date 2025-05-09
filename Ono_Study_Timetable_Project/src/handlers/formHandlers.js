@@ -7,7 +7,6 @@ import {
     saveRoomInSite, deleteRoomFromSite          // For nested Rooms
 } from "../firebase/firestoreService"; // Adjust path
 
-import { hashPassword } from "../utils/hash";
 import { validateFormByType } from "../utils/validateForm";
 import { getPrimaryKeyFieldByRecordType, getEntityKeyByRecordType } from "../utils/formMappings"; // Use both mapping helpers
 // Import Course Meeting generators IF handlers trigger them
@@ -139,12 +138,6 @@ export const handleSaveOrUpdateRecord = async (
 
         // --- 3. Prepare Data (Hashing, Cleaning) ---
         let preparedData = { ...formData };
-        if (entityKey === "students" && preparedData.password?.length > 0) {
-             try {
-                 preparedData.password = await hashPassword(preparedData.password);
-                 console.log("[Handler:SaveUpdate] Student password hashed.");
-             } catch (hashError) { throw new Error(`Password hashing failed: ${hashError.message}`); }
-        }
 
         // --- 4. Perform Firestore Save/Update ---
         let operationSuccess = false;

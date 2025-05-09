@@ -107,7 +107,7 @@ const HeaderNavigationBar = () => {
               >
                  <MenuItem disabled>
                      <Typography variant="caption" sx={{px: 1}}>Logged in as:</Typography>
-                     <Typography variant="body2" sx={{fontWeight: 'bold', px: 1}}>{currentUser.firstName || currentUser.username}</Typography>
+                     <Typography variant="body2" sx={{fontWeight: 'bold', px: 1}}>{currentUser?.firstName || currentUser?.username || 'Guest'}</Typography>
                  </MenuItem>
                  <Divider />
                  <MenuItem onClick={handleLogout}>

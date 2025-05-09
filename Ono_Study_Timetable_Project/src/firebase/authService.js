@@ -5,7 +5,6 @@ import {
     createUserWithEmailAndPassword,
     signOut,
     onAuthStateChanged,
-    updateProfile // If you want to set displayName during signup
 } from "firebase/auth";
 import { app } from './firebaseConfig'; // Assuming app is exported from firebaseConfig.js
 import { setDocument, fetchDocumentById } from './firestoreService'; // To save/fetch user details from Firestore

@@ -28,7 +28,7 @@ export default function AppRouter() {
                </ProtectedRoute>
            }
         >
-            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route index element={<Navigate to="/home" replace />} />
             <Route path="/home" element={<HomePage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/help" element={<HelpPage />} />

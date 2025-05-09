@@ -4,7 +4,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import { Tooltip, Typography, Box, Link as MuiLink } from '@mui/material';
-import { fetchCollection } from '../../utils/firestoreService';
+import { fetchCollection } from '../../firebase/firestoreService';
 
 export default function FullCalendarView({ events, onDateClick, onEventClick }) {
     console.log("[FullCalendarView] Rendering with", events?.length, "events");
