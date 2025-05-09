@@ -1,302 +1,201 @@
-// src/pages/TimeTablePages/TimeTableManagementPage.jsx
-
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Button, Stack, CircularProgress, Typography, Box, Alert } from "@mui/material";
 import { Add as AddIcon, Settings as SettingsIcon, School as SchoolIcon } from '@mui/icons-material';
 import FullCalendarView from "../../components/calendar/FullCalendarView";
 import TimeTableCalendarManageModal from "../../components/modals/TimeTableCalendarManageModal";
 import ManageCourseDefinitionModal from "../../components/modals/ManageCourseDefinitionModal";
-import { getRecords } from "../../utils/storage";
+import { fetchCollection } from "../../utils/firestoreService"; // Use Firestore service
 import { formatDateTime, getExclusiveEndDate } from '../../utils/eventFormatters';
 
+// --- Helper Function to fetch and create Lecturers Map (Async) ---
+// Keep cache to avoid re-fetching if component re-renders for other reasons
 let lecturersMapCache = null;
-const getLecturersMap = () => {
+const getLecturersMapAsync = async () => {
     if (lecturersMapCache) return lecturersMapCache;
-    console.log("[ManagementPage:getLecturersMap] Creating lecturers map...");
+    console.log("[ManagementPage:getLecturersMapAsync] Creating lecturers map from Firestore...");
     try {
-        const lecturers = getRecords("lecturers") || [];
-        lecturersMapCache = new Map(lecturers.map(l => [l.id, l.name]));
+        const lecturers = await fetchCollection("lecturers");
+        lecturersMapCache = new Map((lecturers || []).map(l => [l.id, l.name]));
         return lecturersMapCache;
-    } catch (error) { /* ... error handling ... */ }
+    } catch (error) {
+         console.error("[ManagementPage:getLecturersMapAsync] Error:", error);
+         lecturersMapCache = new Map(); // Return empty on error but still cache it
+         return lecturersMapCache;
+    }
 };
 
+// --- Color Definitions (Consider moving to a central theme/config) ---
+const EVENT_COLORS = { courseMeeting: '#42a5f5', event: '#ab47bc', holiday: '#ef9a9a', vacation: '#fff59d', task: '#ffa726', yearMarker: '#a5d6a7', semesterMarker: '#81d4fa', studentEvent: '#4db6ac', default: '#bdbdbd' };
+const EVENT_BORDERS = { courseMeeting: '#1e88e5', event: '#8e24aa', holiday: '#e57373', vacation: '#ffee58', task: '#fb8c00', yearMarker: '#66bb6a', semesterMarker: '#29b6f6', studentEvent: '#26a69a', default: '#9e9e9e' };
+const EVENT_TEXT_COLORS = { courseMeeting: '#000000', event: '#ffffff', holiday: '#b71c1c', vacation: '#5d4037', task: '#000000', yearMarker: '#1b5e20', semesterMarker: '#01579b', studentEvent: '#ffffff', default: '#000000' };
 
-const EVENT_COLORS = {
-    courseMeeting: '#42a5f5',
-    event: '#ab47bc',
-    holiday: '#ef9a9a',
-    vacation: '#fff59d',
-    task: '#ffa726',
-    yearMarker: '#a5d6a7',
-    semesterMarker: '#81d4fa',
-    studentEvent: '#4db6ac',
-    default: '#bdbdbd'
-};
-
-
-const EVENT_TEXT_COLORS = {
-    courseMeeting: '#000000',
-    event: '#ffffff',
-    holiday: '#b71c1c',
-    vacation: '#5d4037',
-    task: '#000000',
-    yearMarker: '#1b5e20',
-    semesterMarker: '#01579b',
-    studentEvent: '#ffffff',
-    default: '#000000'
-};
-
+// --- Main Page Component ---
 export default function TimeTableManagementPage() {
+    // --- State Definitions ---
     const [allCalendarEvents, setAllCalendarEvents] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [existingCourses, setExistingCourses] = useState([]);
+    const [lecturersMap, setLecturersMap] = useState(new Map()); // State for the loaded map
+
+    // Modal States
     const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
     const [selectedEventDataForModal, setSelectedEventDataForModal] = useState(null);
     const [selectedRecordTypeForModal, setSelectedRecordTypeForModal] = useState(null);
     const [modalDefaultDate, setModalDefaultDate] = useState(null);
     const [isManageEntitiesModalOpen, setIsManageEntitiesModalOpen] = useState(false);
     const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
-    const [courseToEdit, setCourseToEdit] = useState(null);
-    const lecturersMap = useMemo(() => getLecturersMap(), []);
-    const loadData = useCallback(() => {
-        console.log("[ManagementPage:loadData] Loading ALL data (Events & Courses)...");
-        setIsLoading(true);
-        setError(null);
+    const [courseToEdit, setCourseToEdit] = useState(null); // For editing a course definition
 
+    // --- Data Loading and Formatting Function ---
+    const loadData = useCallback(async () => {
+        console.log("[ManagementPage:loadData] Loading ALL data from Firestore...");
+        setIsLoading(true); setError(null);
         try {
-            const courses = getRecords("courses") || [];
-            setExistingCourses(courses);
-            console.log(`[ManagementPage:loadData] Loaded ${courses.length} course definitions.`);
-            const combinedEvents = [];
-            const currentLecturersMap = getLecturersMap();
-            try {
-                const rawMeetings = getRecords("coursesMeetings") || [];
-                console.log(`[ManagementPage:loadData] Raw meetings count: ${rawMeetings.length}`);
-                const formattedMeetings = rawMeetings.map((meeting) => {
-                    const start = formatDateTime(meeting.date, meeting.startHour);
-                    const end = formatDateTime(meeting.date, meeting.endHour);
-                    if (!start || !end) { console.warn(`Skipping meeting ${meeting.id} due to invalid date/time.`); return null; }
-                    const lecturerName = currentLecturersMap.get(meeting.lecturerId);
-                    const color = EVENT_COLORS.courseMeeting;
-                    return {
-                        id: meeting.id,
-                        title: `${meeting.courseName || 'Meeting'}`,
-                        start, end, allDay: false, color, borderColor: color,
-                        classNames: ['fc-event-course-meeting'],
-                        extendedProps: { ...meeting, type: "courseMeeting", recordTypeForModal: "courseMeeting", lecturerName: lecturerName || null }
-                    };
-                }).filter(Boolean);
-                combinedEvents.push(...formattedMeetings);
-                console.log(`[ManagementPage:loadData] Formatted ${formattedMeetings.length} course meetings.`);
-            } catch (err) { console.error("Error formatting meetings:", err); }
-            try {
-                const rawGeneralEvents = getRecords("events") || [];
-                console.log(`[ManagementPage:loadData] Raw general events count: ${rawGeneralEvents.length}`);
-                const formattedGeneralEvents = rawGeneralEvents.map((event) => {
-                    const isAllDay = String(event.allDay).toLowerCase() === 'true';
-                    const start = isAllDay ? event.startDate : formatDateTime(event.startDate, event.startHour);
-                    const end = isAllDay ? getExclusiveEndDate(event.startDate, event.endDate) : formatDateTime(event.endDate || event.startDate, event.endHour || event.startHour);
-                    if (!start) { console.warn(`Skipping event ${event.eventCode} due to invalid start.`); return null; }
-                    const color = EVENT_COLORS.event;
-                    return {
-                        id: event.eventCode, title: event.eventName || 'Event', start,
-                        end: isAllDay ? end : (end || start), allDay: isAllDay,
-                        color, borderColor: color, classNames: ['fc-event-general'],
-                        extendedProps: { ...event, type: "event", recordTypeForModal: "event" }
-                    };
-                }).filter(Boolean);
-                combinedEvents.push(...formattedGeneralEvents);
-                console.log(`[ManagementPage:loadData] Formatted ${formattedGeneralEvents.length} general events.`);
-            } catch (err) { console.error("Error formatting general events:", err); }
-            try {
-                const rawHolidays = getRecords("holidays") || [];
-                console.log(`[ManagementPage:loadData] Raw holidays count: ${rawHolidays.length}`);
-                const formattedHolidays = rawHolidays.map((holiday) => {
-                    if (!holiday.holidayCode || !holiday.startDate) return null;
-                    const exclusiveEnd = getExclusiveEndDate(holiday.startDate, holiday.endDate);
-                    const bgColor = EVENT_COLORS.holiday; const textColor = EVENT_TEXT_COLORS.holiday;
-                    return {
-                        id: holiday.holidayCode, title: holiday.holidayName || 'Holiday', start: holiday.startDate, end: exclusiveEnd,
-                        allDay: true, display: 'block', backgroundColor: bgColor, borderColor: bgColor, textColor: textColor || EVENT_TEXT_COLORS.default,
-                        classNames: ['fc-event-block', 'fc-event-holiday'],
-                        extendedProps: { ...holiday, type: 'holiday', recordTypeForModal: 'holiday' }
-                    };
-                }).filter(Boolean);
-                combinedEvents.push(...formattedHolidays);
-                 console.log(`[ManagementPage:loadData] Formatted ${formattedHolidays.length} holidays.`);
-            } catch (err) { console.error("Error formatting holidays:", err); }
-             try {
-                const rawVacations = getRecords("vacations") || [];
-                console.log(`[ManagementPage:loadData] Raw vacations count: ${rawVacations.length}`);
-                const formattedVacations = rawVacations.map((vacation) => {
-                    if (!vacation.vacationCode || !vacation.startDate) return null;
-                    const exclusiveEnd = getExclusiveEndDate(vacation.startDate, vacation.endDate);
-                    const bgColor = EVENT_COLORS.vacation; const textColor = EVENT_TEXT_COLORS.vacation;
-                    return {
-                        id: vacation.vacationCode, title: vacation.vacationName || 'Vacation', start: vacation.startDate, end: exclusiveEnd,
-                        allDay: true, display: 'block', backgroundColor: bgColor, borderColor: bgColor, textColor: textColor || EVENT_TEXT_COLORS.default,
-                        classNames: ['fc-event-block', 'fc-event-vacation'],
-                        extendedProps: { ...vacation, type: 'vacation', recordTypeForModal: 'vacation' }
-                    };
-                }).filter(Boolean);
-                combinedEvents.push(...formattedVacations);
-                 console.log(`[ManagementPage:loadData] Formatted ${formattedVacations.length} vacations.`);
-            } catch (err) { console.error("Error formatting vacations:", err); }
-             try {
-                const years = getRecords("years") || [];
-                 console.log(`[ManagementPage:loadData] Raw years count: ${years.length}`);
-                const markerEvents = years.flatMap((year) => {
-                    if (!year.yearCode || !year.startDate || !year.endDate) return [];
-                    const yearColor = EVENT_COLORS.yearMarker; const semesterColor = EVENT_COLORS.semesterMarker;
-                    const markers = [];
-                    markers.push({ id: `y-start-${year.yearCode}`, title: `Year${year.yearNumber} Start`, start: year.startDate, allDay: true, display: 'block', color: yearColor, classNames: ['fc-event-marker'], extendedProps: { ...year, type: 'yearMarker', recordTypeForModal: 'year' } });
-                    markers.push({ id: `y-end-${year.yearCode}`, title: `Year${year.yearNumber} End`, start: year.endDate, allDay: true, display: 'block', color: yearColor, classNames: ['fc-event-marker'], extendedProps: { ...year, type: 'yearMarker', recordTypeForModal: 'year' } });
-                    (year.semesters || []).forEach((s) => {
-                         if (!s.semesterCode || !s.startDate || !s.endDate) return;
-                         const semData = { ...s, yearCode: year.yearCode };
-                         markers.push({ id: `s-start-${s.semesterCode}`, title: `Semester${s.semesterNumber}/Year${year.yearNumber} Start`, start: s.startDate, allDay: true, display: 'block', color: semesterColor, classNames: ['fc-event-marker'], extendedProps: { ...semData, type: 'semesterMarker', recordTypeForModal: 'semester' } });
-                         markers.push({ id: `s-end-${s.semesterCode}`, title: `Semester${s.semesterNumber}/Year${year.yearNumber} End`, start: s.endDate, allDay: true, display: 'block', color: semesterColor, classNames: ['fc-event-marker'], extendedProps: { ...semData, type: 'semesterMarker', recordTypeForModal: 'semester' } });
-                    });
-                    return markers;
-                }).filter(Boolean);
-                combinedEvents.push(...markerEvents);
-                 console.log(`[ManagementPage:loadData] Formatted ${markerEvents.length} year/semester markers.`);
-            } catch (err) { console.error("Error formatting markers:", err); }
-            try {
-                const rawTasks = getRecords("tasks") || [];
-                 console.log(`[ManagementPage:loadData] Raw tasks count: ${rawTasks.length}`);
-                const formattedTasks = rawTasks.map(task => {
-                     if (!task.assignmentCode || !task.submissionDate) return null;
-                     const start = formatDateTime(task.submissionDate, task.submissionHour || '23:59');
-                     if (!start) return null;
-                     const color = EVENT_COLORS.task; const textColor = EVENT_TEXT_COLORS.task;
-                     return {
-                         id: task.assignmentCode, title: `Due: ${task.assignmentName || 'Task'}`, start, allDay: false,
-                         color, borderColor: color, textColor: textColor || EVENT_TEXT_COLORS.default,
-                         classNames: ['fc-event-task'],
-                         extendedProps: { ...task, type: 'task', recordTypeForModal: 'task' }
-                     };
-                }).filter(Boolean);
-                combinedEvents.push(...formattedTasks);
-                 console.log(`[ManagementPage:loadData] Formatted ${formattedTasks.length} tasks.`);
-            } catch (err) { console.error("Error formatting tasks:", err); }
-            setAllCalendarEvents(combinedEvents);
-            console.log(`[ManagementPage:loadData] Total formatted events set to state: ${combinedEvents.length}`);
+            // Fetch all necessary collections in parallel
+            const [
+                coursesData, meetingsData, eventsData, holidaysData,
+                vacationsData, yearsData, tasksData, currentLecturersMap
+            ] = await Promise.all([
+                fetchCollection("courses"),
+                fetchCollection("coursesMeetings"),
+                fetchCollection("events"),
+                fetchCollection("holidays"),
+                fetchCollection("vacations"),
+                fetchCollection("years"),
+                fetchCollection("tasks"),
+                getLecturersMapAsync() // Fetch (or get from cache) the lecturers map
+            ]);
 
+            setExistingCourses(coursesData || []);
+            setLecturersMap(currentLecturersMap || new Map()); // Set the loaded map to state
+            console.log(`[ManagementPage:loadData] Loaded ${coursesData?.length || 0} course definitions.`);
+
+            const combinedEvents = [];
+
+            // Format Meetings
+            (meetingsData || []).forEach(m => {
+                const start = formatDateTime(m.date, m.startHour); const end = formatDateTime(m.date, m.endHour); if (!start || !end) return;
+                const lecturerName = currentLecturersMap.get(m.lecturerId);
+                const type = 'courseMeeting';
+                combinedEvents.push({ id: m.id, title: `${m.courseName || 'Meeting'}`, start, end, allDay: false, color: EVENT_COLORS[type], borderColor: EVENT_BORDERS[type], textColor: EVENT_TEXT_COLORS[type], classNames: ['fc-event-course-meeting'], extendedProps: { ...m, type, recordTypeForModal: "courseMeeting", lecturerName: lecturerName || null } });
+            });
+
+            // Format General Events
+            (eventsData || []).forEach(e => {
+                const type = 'event'; const isAllDay = String(e.allDay).toLowerCase() === 'true';
+                const start = isAllDay ? e.startDate : formatDateTime(e.startDate, e.startHour);
+                const end = isAllDay ? getExclusiveEndDate(e.startDate, e.endDate) : formatDateTime(e.endDate || e.startDate, e.endHour || e.startHour);
+                if (!start) return;
+                combinedEvents.push({ id: e.eventCode, title: e.eventName || 'Event', start, end: isAllDay ? end : (end || start), allDay: isAllDay, color: EVENT_COLORS[type], borderColor: EVENT_BORDERS[type], textColor: EVENT_TEXT_COLORS[type], classNames: ['fc-event-general'], extendedProps: { ...e, type, recordTypeForModal: "event" } });
+            });
+
+            // Format Holidays
+            (holidaysData || []).forEach(h => {
+                if (!h.holidayCode || !h.startDate) return; const type = 'holiday'; const exclusiveEnd = getExclusiveEndDate(h.startDate, h.endDate);
+                combinedEvents.push({ id: h.holidayCode, title: h.holidayName || 'Holiday', start: h.startDate, end: exclusiveEnd, allDay: true, display: 'block', backgroundColor: EVENT_COLORS[type], borderColor: EVENT_BORDERS[type], textColor: EVENT_TEXT_COLORS[type], classNames: ['fc-event-block', 'fc-event-holiday'], extendedProps: { ...h, type, recordTypeForModal: 'holiday' } });
+            });
+
+            // Format Vacations
+            (vacationsData || []).forEach(v => {
+                if (!v.vacationCode || !v.startDate) return; const type = 'vacation'; const exclusiveEnd = getExclusiveEndDate(v.startDate, v.endDate);
+                combinedEvents.push({ id: v.vacationCode, title: v.vacationName || 'Vacation', start: v.startDate, end: exclusiveEnd, allDay: true, display: 'block', backgroundColor: EVENT_COLORS[type], borderColor: EVENT_BORDERS[type], textColor: EVENT_TEXT_COLORS[type], classNames: ['fc-event-block', 'fc-event-vacation'], extendedProps: { ...v, type, recordTypeForModal: 'vacation' } });
+            });
+
+            // Format Year & Semester Markers (as Block events)
+            (yearsData || []).forEach(year => {
+                if (!year.yearCode || !year.startDate || !year.endDate) return;
+                const yType = 'yearMarker'; const sType = 'semesterMarker';
+                combinedEvents.push({ id: `y-start-${year.yearCode}`, title: `Y${year.yearNumber} Start`, start: year.startDate, allDay: true, display: 'block', backgroundColor: EVENT_COLORS[yType], borderColor: EVENT_BORDERS[yType], textColor: EVENT_TEXT_COLORS[yType], classNames: ['fc-event-marker', 'fc-event-block-marker'], extendedProps: { ...year, type: yType, recordTypeForModal: 'year' } });
+                combinedEvents.push({ id: `y-end-${year.yearCode}`, title: `Y${year.yearNumber} End`, start: year.endDate, allDay: true, display: 'block', backgroundColor: EVENT_COLORS[yType], borderColor: EVENT_BORDERS[yType], textColor: EVENT_TEXT_COLORS[yType], classNames: ['fc-event-marker', 'fc-event-block-marker'], extendedProps: { ...year, type: yType, recordTypeForModal: 'year' } });
+                (year.semesters || []).forEach(s => {
+                     if (!s.semesterCode || !s.startDate || !s.endDate) return; const semData = { ...s, yearCode: year.yearCode };
+                     combinedEvents.push({ id: `s-start-${s.semesterCode}`, title: `S${s.semesterNumber}/Y${year.yearNumber} Start`, start: s.startDate, allDay: true, display: 'block', backgroundColor: EVENT_COLORS[sType], borderColor: EVENT_BORDERS[sType], textColor: EVENT_TEXT_COLORS[sType], classNames: ['fc-event-marker', 'fc-event-block-marker'], extendedProps: { ...semData, type: sType, recordTypeForModal: 'semester' } });
+                     combinedEvents.push({ id: `s-end-${s.semesterCode}`, title: `S${s.semesterNumber}/Y${year.yearNumber} End`, start: s.endDate, allDay: true, display: 'block', backgroundColor: EVENT_COLORS[sType], borderColor: EVENT_BORDERS[sType], textColor: EVENT_TEXT_COLORS[sType], classNames: ['fc-event-marker', 'fc-event-block-marker'], extendedProps: { ...semData, type: sType, recordTypeForModal: 'semester' } });
+                });
+            });
+
+            // Format Tasks
+            (tasksData || []).forEach(t => {
+                 if (!t.assignmentCode || !t.submissionDate) return; const type = 'task'; const start = formatDateTime(t.submissionDate, t.submissionHour || '23:59'); if (!start) return;
+                 combinedEvents.push({ id: t.assignmentCode, title: `Due: ${t.assignmentName || 'Task'}`, start, allDay: false, color: EVENT_COLORS[type], borderColor: EVENT_BORDERS[type], textColor: EVENT_TEXT_COLORS[type], classNames: ['fc-event-task'], extendedProps: { ...t, type, recordTypeForModal: 'task'} });
+            });
+
+            setAllCalendarEvents(combinedEvents);
+            console.log(`[ManagementPage:loadData] Total events formatted: ${combinedEvents.length}`);
         } catch (err) {
-            console.error("[ManagementPage:loadData] Overall error loading data:", err);
-            setError("Failed to load required page data. Please check storage or refresh.");
-            setAllCalendarEvents([]);
-            setExistingCourses([]);
+            console.error("[ManagementPage:loadData] Overall error:", err);
+            setError("Failed to load timetable data. Please try refreshing.");
+            setAllCalendarEvents([]); setExistingCourses([]); setLecturersMap(new Map());
         } finally {
             setIsLoading(false);
-            console.log("[ManagementPage:loadData] Finished.");
         }
-    }, [lecturersMap]);
+    }, []); // No explicit dependencies as it fetches all on call, relies on refresh trigger
 
-    useEffect(() => {
-        loadData();
-    }, [loadData]);
+    // --- useEffect for initial data load ---
+    useEffect(() => { loadData(); }, [loadData]);
+
+    // --- Event Handlers for Calendar Interactions ---
     const handleDateClick = useCallback((info) => {
         setSelectedEventDataForModal(null); setSelectedRecordTypeForModal(null);
         setModalDefaultDate(info.dateStr || new Date().toISOString().split('T')[0]);
-        setIsCalendarModalOpen(true);
+        setIsCalendarModalOpen(true); // Opens the TimeTableCalendarManageModal
     }, []);
 
     const handleEventClick = useCallback((info) => {
-        const clickedEvent = info.event;
-        const props = clickedEvent.extendedProps;
-        console.log(`[ManagementPage] Event clicked: ID=${clickedEvent.id}, Type=${props?.type}, RecordTypeForModal=${props?.recordTypeForModal}`);
-        console.log(`[handleEventClick] Clicked Event ID: ${clickedEvent.id}`);
-        console.log(`[handleEventClick] extendedProps (props):`, props);
-        console.log(`[handleEventClick] props.recordTypeForModal:`, props?.recordTypeForModal);
-        if (!props || !props.recordTypeForModal) {
-            console.warn("[ManagementPage] Clicked event missing critical extendedProps. Cannot edit.");
-            alert("Cannot edit this event: Missing required internal data.");
+        const props = info.event.extendedProps;
+        if (!props || !props.recordTypeForModal || props.type === 'studentEvent') {
+            if (props?.type !== 'studentEvent') alert("This event type is not directly editable here or has missing data.");
             return;
         }
-        if (props.type === 'studentEvent') {
-            console.log("[ManagementPage] Clicked on a student's personal event. Editing disabled on this page.");
-            alert(`Student Event: ${clickedEvent.title}\n(Cannot be edited from the management page)`);
-            return;
-        }
-
-        else if (props.recordTypeForModal === 'semester') {
-          console.log('[handleEventClick] SEMESTER CLICK DETECTED. Preparing to open EDIT modal.');
-     } else {
-          console.log('[handleEventClick] OTHER EDITABLE EVENT CLICK DETECTED. Preparing to open EDIT modal.');
-     }
-
+        // Year/Semester markers are now editable block events
         setSelectedEventDataForModal(props);
         setSelectedRecordTypeForModal(props.recordTypeForModal);
         setModalDefaultDate(null);
-        setIsCalendarModalOpen(true);
+        setIsCalendarModalOpen(true); // Opens TimeTableCalendarManageModal which routes to EditModal
     }, []);
-    
+
+    // --- Modal Control Handlers ---
     const handleCloseCalendarModal = useCallback(() => {
-        setIsCalendarModalOpen(false);
-        setSelectedEventDataForModal(null); setSelectedRecordTypeForModal(null); setModalDefaultDate(null);
+        setIsCalendarModalOpen(false); setSelectedEventDataForModal(null);
+        setSelectedRecordTypeForModal(null); setModalDefaultDate(null);
     }, []);
 
     const handleOpenCourseModal = (courseData = null) => {
-        setCourseToEdit(courseData);
-        setIsCourseModalOpen(true);
+        setCourseToEdit(courseData); setIsCourseModalOpen(true);
     };
-
     const handleCloseCourseModal = useCallback(() => {
-        setIsCourseModalOpen(false);
-        setCourseToEdit(null);
+        setIsCourseModalOpen(false); setCourseToEdit(null);
     }, []);
 
+    // Generic success handler after any Add/Edit/Delete from any modal
     const handleSuccessfulSaveOrDelete = useCallback(() => {
-        console.log("[ManagementPage] Received successful save/delete signal. Reloading data...");
+        console.log("[ManagementPage] Save/Delete successful. Reloading data...");
         if (isCalendarModalOpen) handleCloseCalendarModal();
         if (isCourseModalOpen) handleCloseCourseModal();
         if (isManageEntitiesModalOpen) setIsManageEntitiesModalOpen(false);
-        loadData();
-    }, [handleCloseCalendarModal, handleCloseCourseModal, isCalendarModalOpen, isCourseModalOpen, isManageEntitiesModalOpen, loadData]);
+        loadData(); // Reload all data from Firestore
+    }, [isCalendarModalOpen, isCourseModalOpen, isManageEntitiesModalOpen, loadData, handleCloseCalendarModal, handleCloseCourseModal]);
 
+
+    // --- Render Logic ---
     return (
         <Box sx={{ padding: { xs: "1rem", md: "2rem" }, maxWidth: "1500px", margin: "auto" }}>
-            <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 3 }}>
-                Timetable Management Console
-            </Typography>
+            <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 3 }}> Timetable Management Console </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mb={3} justifyContent="center" flexWrap="wrap">
-                <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={() => { setIsCalendarModalOpen(true); setSelectedEventDataForModal(null); }} sx={{ whiteSpace: 'nowrap' }}>
-                    Add Calendar Entry
-                </Button>
-                <Button variant="contained" color="success" startIcon={<SchoolIcon />} onClick={() => handleOpenCourseModal(null)} sx={{ whiteSpace: 'nowrap' }}>
-                    Manage Courses
-                </Button>
-                <Button variant="contained" color="secondary" startIcon={<SettingsIcon />} onClick={() => setIsManageEntitiesModalOpen(true)} sx={{ whiteSpace: 'nowrap' }}>
-                    Manage Entities
-                </Button>
+                <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={() => { setIsCalendarModalOpen(true); setSelectedEventDataForModal(null); setSelectedRecordTypeForModal(null); setModalDefaultDate(new Date().toISOString().split('T')[0]); }} sx={{ whiteSpace: 'nowrap' }}> Add Calendar Entry </Button>
+                <Button variant="contained" color="success" startIcon={<SchoolIcon />} onClick={() => handleOpenCourseModal(null)} sx={{ whiteSpace: 'nowrap' }}> Manage Courses </Button>
+                <Button variant="contained" color="secondary" startIcon={<SettingsIcon />} onClick={() => setIsManageEntitiesModalOpen(true)} sx={{ whiteSpace: 'nowrap' }}> Manage Entities </Button>
             </Stack>
+
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-            {isLoading ? ( <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}> <CircularProgress /> </Box> )
+            {isLoading ? ( <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}> <CircularProgress /> <Typography sx={{ml:2}}>Loading Timetable Data...</Typography> </Box> )
                        : ( <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', boxShadow: 1, p: { xs: 0.5, sm: 1 } }}>
                               <FullCalendarView events={allCalendarEvents} onDateClick={handleDateClick} onEventClick={handleEventClick} />
                            </Box> )}
 
-            <TimeTableCalendarManageModal
-                open={isCalendarModalOpen}
-                onClose={handleCloseCalendarModal}
-                onSave={handleSuccessfulSaveOrDelete}
-                initialData={selectedEventDataForModal}
-                recordType={selectedRecordTypeForModal}
-                defaultDate={modalDefaultDate}
-                manageEntitiesOpen={isManageEntitiesModalOpen}
-                setManageEntitiesOpen={setIsManageEntitiesModalOpen}
-            />
-
-            <ManageCourseDefinitionModal
-                open={isCourseModalOpen}
-                onClose={handleCloseCourseModal}
-                onSaveSuccess={handleSuccessfulSaveOrDelete}
-                initialData={courseToEdit}
-                existingCourses={existingCourses}
-            />
+            <TimeTableCalendarManageModal open={isCalendarModalOpen} onClose={handleCloseCalendarModal} onSave={handleSuccessfulSaveOrDelete} initialData={selectedEventDataForModal} recordType={selectedRecordTypeForModal} defaultDate={modalDefaultDate} manageEntitiesOpen={isManageEntitiesModalOpen} setManageEntitiesOpen={setIsManageEntitiesModalOpen} />
+            <ManageCourseDefinitionModal open={isCourseModalOpen} onClose={handleCloseCourseModal} onSaveSuccess={handleSuccessfulSaveOrDelete} initialData={courseToEdit} existingCourses={existingCourses} />
         </Box>
     );
 }
