@@ -23,7 +23,7 @@ export default function StudentFormModal({
     useEffect(() => {
         if (open) {
             const defaultFormStructure = {
-                id: "", firstName: "", lastName: "", email: "", username: "",
+                id: "", studentIdCard: "", firstName: "", lastName: "", email: "", username: "",
                 phone: "", password: "", confirmPassword: ""
             };
             if (isEditMode && initialData) {

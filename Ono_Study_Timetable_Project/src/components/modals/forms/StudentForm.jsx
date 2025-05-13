@@ -19,10 +19,9 @@ export default function StudentForm({
         <Grid container spacing={2} mt={0.5}>
            <Grid item xs={12} sm={6}>
                 <TextField
-                    label="Student ID" name="id" value={formData.id || ""} onChange={onChange}
-                    error={!!getError('id')} helperText={getError('id') || ' '}
-                    fullWidth required disabled={mode === 'edit'} variant="outlined" size="small"
-                    InputProps={{ readOnly: mode === 'edit' }}
+                    label="Student Id Card" name="studentIdCard" value={formData.studentIdCard || ""} onChange={onChange}
+                    error={!!getError('studentIdCard')} helperText={getError('studentIdCard') || 'Required, 9 digits, unique' }
+                fullWidth required variant="outlined" size="small"
                 />
            </Grid>
            <Grid item xs={12} sm={6}></Grid>
