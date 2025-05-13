@@ -5,10 +5,19 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { Box, CircularProgress, Typography } from '@mui/material';
 
 const ProtectedRoute = ({ children }) => {
-  const { currentUser, isLoading } = useAuth();
+  const { currentUser, isLoadingAuth, isSeedingGlobal } = useAuth(); // ✅ Get isSeedingGlobal
   const location = useLocation();
-  console.log(`ProtectedRoute Check: isLoading=${isLoading}, hasCurrentUser=${!!currentUser}`);
-  if (isLoading) {
+
+  // ✅ If seeding is in progress, show a global loading/waiting state
+  if (isSeedingGlobal) {
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+            <CircularProgress />
+            <Typography sx={{ mt: 2 }}>Initializing Data... Please Wait.</Typography>
+        </Box>
+    );
+  }
+  if (isLoadingAuth) {
     return (
          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 64px)' }}> {/* Adjust height if needed */}
               <CircularProgress />

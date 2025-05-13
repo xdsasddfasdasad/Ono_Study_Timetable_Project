@@ -19,45 +19,51 @@ export const signInUser = async (email, password) => {
 };
 
 // Example signup function - adjust based on required fields (firstName, lastName, etc.)
-export const signUpUser = async (email, password, firstName, lastName, username, /* other fields */) => {
-    if (!email || !password || !firstName || !lastName || !username) {
-        throw new Error("Required fields missing for sign up.");
+export const signUpUser = async (email, password, firstName, lastName, username, studentIdCard, phone, courseCodes, eventCodes) => {
+    if (!email || !password || !firstName || !lastName || !username || !studentIdCard) {
+        throw new Error("Required fields missing for sign up (Email, Password, Names, Username, Student ID Card).");
     }
     try {
-        // 1. Create user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-        console.log("Firebase Auth user created:", user.uid);
+        const generatedUID = user.uid;
+        console.log("[AuthService:SignUp] Firebase Auth user created:", generatedUID);
 
-        // 2. (Optional) Update Firebase Auth profile (e.g., displayName)
-        // await updateProfile(user, { displayName: `${firstName} ${lastName}` });
-
-        // 3. Create corresponding user document in Firestore 'students' collection
-        // Use the Firebase Auth UID as the document ID in Firestore
-        const userData = {
-            id: user.uid, // Use Firebase UID as the document ID
-            uid: user.uid, // Store UID also as a field if needed
-            email: user.email,
-            firstName: firstName,
-            lastName: lastName,
-            username: username,
-            // Add other fields like phone, courseCodes, roles etc.
-            createdAt: new Date().toISOString(), // Track creation time
-            // DO NOT store password here
+        const userProfileData = {
+            uid: generatedUID,
+            id: generatedUID, // Using UID as the primary ID in Firestore document
+            email: user.email, // Email from Auth
+            firstName,
+            lastName,
+            username,
+            studentIdCard, // The 9-digit ID from the form
+            phone: phone || "", // Optional
+            courseCodes: courseCodes || [],
+            eventCodes: eventCodes || [],
+            createdAt: new Date().toISOString(),
+            // role: studentIdCard === '000000001' ? 'admin' : 'student' // Example role assignment
         };
-        await setDocument('students', user.uid, userData); // Use setDoc with UID
-        console.log("User document created in Firestore for:", user.uid);
+        // Use UID as the document ID in 'students' collection
+        await setDocument('students', generatedUID, userProfileData);
+        console.log("[AuthService:SignUp] Firestore profile document created for UID:", generatedUID);
 
-        return userCredential; // Return the full credential
+        return userCredential;
     } catch (error) {
-        console.error("Error during sign up:", error.code, error.message);
-        // Handle specific errors like 'auth/email-already-in-use'
-        throw error; // Re-throw for the calling component to handle
+        console.error("[AuthService:SignUp] Error during sign up:", error.code, error.message);
+        throw error; // Re-throw for the calling component/handler
     }
 };
 
 export const signOutUser = async () => {
-    return signOut(auth);
+    console.log("[AuthService] Attempting to sign out user...");
+    try {
+        await signOut(auth);
+        console.log("[AuthService] User signed out successfully from Firebase.");
+        return true; // Indicate success
+    } catch (error) {
+        console.error("[AuthService] Error signing out user:", error);
+        throw error; // Re-throw the error for the caller to handle if needed
+    }
 };
 
 // Listener for authentication state changes
