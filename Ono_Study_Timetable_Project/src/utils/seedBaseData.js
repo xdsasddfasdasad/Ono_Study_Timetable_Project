@@ -38,6 +38,9 @@ const getSeedIdField = (entityKey) => {
  * @param {boolean} force - If true, will attempt to seed collections even if they seem populated.
  *                          For students, it won't force Auth user creation if email exists.
  */
+
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const seedBaseData = async (force = false) => {
   console.log(`[SeedBase] Attempting to seed base data. Force mode: ${force}`);
 
@@ -53,70 +56,57 @@ export const seedBaseData = async (force = false) => {
       let createdAuthUsersCount = 0;
       let createdFirestoreProfilesCount = 0;
 
-      // Process each student from dummyData
-      const studentCreationPromises = studentsToSeed.map(async (studentDataFromDummy) => {
-        // Validate essential data for creating an auth user and profile
+ // ✅ Change from map + Promise.allSettled to a sequential for...of loop for rate limiting
+      for (const studentDataFromDummy of studentsToSeed) {
         if (!studentDataFromDummy.email || !studentDataFromDummy.password || !studentDataFromDummy.id) {
-          console.warn("[SeedBase] Skipping student due to missing email, password, or dummy ID (for studentIdCard):", studentDataFromDummy.username || studentDataFromDummy.email);
-          return { status: 'skipped', reason: 'Missing essential data' };
+          console.warn("[SeedBase] Skipping student (missing data):", studentDataFromDummy.username || studentDataFromDummy.email);
+          continue;
         }
 
-        let firebaseUID = null; // UID from Firebase Auth
+        let firebaseUID = null;
 
         try {
-          // Step 1: Create user in Firebase Authentication
-          console.log(`[SeedBase] Attempting Auth user creation for: ${studentDataFromDummy.email}`);
+          console.log(`[SeedBase] Attempting to create Auth user for ${studentDataFromDummy.email}...`);
           const userCredential = await createUserWithEmailAndPassword(auth, studentDataFromDummy.email, studentDataFromDummy.password);
           firebaseUID = userCredential.user.uid;
           console.log(`[SeedBase] SUCCESS: Auth user created for ${studentDataFromDummy.email} with UID: ${firebaseUID}`);
           createdAuthUsersCount++;
 
-          // Step 2: If Auth user created, prepare and save Firestore profile
-          const { password, id: studentIdCard, courseCodes, eventCodes, ...profileDetails } = studentDataFromDummy;
+          const { password, id: idFromDummy, courseCodes, eventCodes, ...profileData } = studentDataFromDummy;
           const firestoreProfileData = {
-            ...profileDetails,       // Includes firstName, lastName, username, email, phone
-            uid: firebaseUID,         // Firebase Auth UID
-            id: firebaseUID,          // Use UID as the main 'id' for Firestore document
-            studentIdCard: studentIdCard, // The 9-digit ID from dummyData
-            courseCodes: courseCodes || [],
-            eventCodes: eventCodes || [],
+            ...profileData, uid: firebaseUID, id: firebaseUID, studentIdCard: idFromDummy,
+            courseCodes: courseCodes || [], eventCodes: eventCodes || [],
             createdAt: new Date().toISOString(),
-            // role: studentIdCard === '000000001' ? 'admin' : 'student', // Example role
           };
-
-          const studentDocRef = doc(db, studentsCollectionName, firebaseUID); // Use UID as Firestore document ID
-          await setDoc(studentDocRef, firestoreProfileData); // setDoc creates or overwrites
-          console.log(`[SeedBase] SUCCESS: Firestore profile created for ${firestoreProfileData.username} (UID: ${firebaseUID})`);
+          const studentDocRef = doc(db, studentsCollectionName, firebaseUID);
+          await setDoc(studentDocRef, firestoreProfileData, { merge: true });
+          console.log(`[SeedBase] SUCCESS: Firestore profile created for ${profileData.username} (UID: ${firebaseUID})`);
           createdFirestoreProfilesCount++;
-          return { status: 'fulfilled', email: studentDataFromDummy.email, uid: firebaseUID };
 
         } catch (authError) {
           if (authError.code === 'auth/email-already-in-use') {
-            console.warn(`[SeedBase] Auth user for ${studentDataFromDummy.email} ALREADY EXISTS. Firestore profile not created/updated by this seed pass for this user.`);
-            return { status: 'skipped', reason: 'Auth user already exists', email: studentDataFromDummy.email };
+            console.warn(`[SeedBase] Auth user for ${studentDataFromDummy.email} ALREADY EXISTS.`);
           } else {
-            // Other Firebase Auth errors (e.g., weak password, invalid email format)
-            console.error(`[SeedBase] FAILED to create Auth user for ${studentDataFromDummy.email}: ${authError.code} - ${authError.message}`);
-            return { status: 'rejected', reason: authError.message, email: studentDataFromDummy.email };
+            console.error(`[SeedBase] FAILED to create Auth user for ${studentDataFromDummy.email}:`, authError.message, `(Code: ${authError.code})`);
+            if (authError.code === 'auth/too-many-requests') {
+                 console.log("[SeedBase] Rate limit hit. Waiting before next attempt...");
+                 await delay(5000); // Wait 5 seconds before trying the next user
+                 // Optionally, you could retry the current user, but that complicates logic.
+                 // For seeding, just moving to the next after a delay is often simpler.
+            }
           }
         }
-      }); // End map for studentCreationPromises
-
-      // Wait for all student creation attempts to settle
-      const results = await Promise.allSettled(studentCreationPromises);
-      results.forEach(result => {
-        if (result.status === 'rejected') {
-          console.error(`[SeedBase] Student processing promise rejected for ${result.reason?.email || 'unknown student'}: ${result.reason?.reason || result.reason}`);
-        }
-      });
-      console.log(`[SeedBase] Student Seeding Summary: Attempted ${studentsToSeed.length}, Auth users created: ${createdAuthUsersCount}, Firestore profiles created: ${createdFirestoreProfilesCount}`);
+        // ✅ Add a delay between each user creation attempt
+        console.log(`[SeedBase] Processed ${studentDataFromDummy.email}. Waiting before next...`);
+        await delay(1000); // Wait 1 second (1000ms). Adjust as needed.
+      }
+      console.log(`[SeedBase] Student Seeding Summary: Auth users created: ${createdAuthUsersCount}, Firestore profiles created: ${createdFirestoreProfilesCount}`);
 
     } else {
-      console.log(`[SeedBase] ${studentsCollectionName} collection already populated or 'force' is false. Skipping students seed.`);
+      console.log(`[SeedBase] ${studentsCollectionName} already populated or 'force' is false. Skipping.`);
     }
   } catch (error) {
-    // Catch errors from isCollectionPopulated or other unexpected issues in the student seeding block
-    console.error(`[SeedBase] General error during student seeding process:`, error);
+    console.error(`[SeedBase] Error during student seeding process:`, error);
   }
 
   // --- 2. Seed Other Top-Level Collections (Years, Lecturers, Sites, etc.) ---
