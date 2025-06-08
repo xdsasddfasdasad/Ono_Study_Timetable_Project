@@ -87,9 +87,32 @@ export const formMappings = {
       semesterCode: '',
       lecturerId: '',
       roomCode: '',
-      hours: [{ day: 1, start: '09:00', end: '12:00' }], // Default to one session
+      hours: [{ day: 1, start: '09:00', end: '12:00' }],
       notes: '',
       zoomMeetinglink: '',
+      ...defaults,
+    }),
+  },
+
+  // --- ✨ הוספת ההגדרה החסרה עבור פגישת קורס ✨ ---
+  courseMeeting: {
+    collectionName: 'coursesMeetings', // שם הקולקציה הנכון והעקבי
+    primaryKey: 'id', // המפתח הראשי הוא המזהה הייחודי של הפגישה
+    label: 'Course Meeting',
+    recordType: 'courseMeeting',
+    initialData: (defaults = {}) => ({
+      id: `CM-${Date.now()}`, // יצירת ID זמני
+      title: '',
+      start: new Date().toISOString(), // שימוש בתאריך ושעה מלאים
+      end: new Date().toISOString(),   // שימוש בתאריך ושעה מלאים
+      lecturerId: '',
+      roomCode: '',
+      courseCode: '', // יתמלא אוטומטית מהורה
+      semesterCode: '', // יתמלא אוטומטית מהורה
+      notes: '',
+      zoomMeetinglink: '',
+      type: 'courseMeeting', // ציון סוג הרשומה
+      allDay: false,
       ...defaults,
     }),
   },

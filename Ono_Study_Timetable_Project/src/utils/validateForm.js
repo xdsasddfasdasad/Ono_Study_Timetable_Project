@@ -222,20 +222,53 @@ export const validateCourseForm = async (formData, options = {}) => {
 // Uniqueness check on 'id' might be less critical if generated robustly.
 export const validateCourseMeetingForm = async (formData, options = {}) => {
     const errors = {};
-    const editingId = options.editingId; // Meeting document ID
 
-    if (!formData.id?.trim()) errors.id = "Meeting ID is required.";
-    // Optional: Check ID uniqueness if needed (less likely for generated IDs)
-    // else { try { ... fetchDocumentsByQuery('coursesMeetings', 'id', '==', formData.id)... } catch ... }
-
-    if (!formData.courseCode?.trim()) errors.courseCode = "Associated course code is required.";
-    if (!formData.date?.trim()) errors.date = "Date is required.";
-    if (!formData.startHour?.trim()) errors.startHour = "Start time is required.";
-    if (!formData.endHour?.trim()) errors.endHour = "End time is required.";
-    if (formData.startHour && formData.endHour && formData.startHour >= formData.endHour) {
-        errors.endHour = "End time must be after start time.";
+    if (!formData.title?.trim()) {
+      errors.title = "Meeting title is required.";
     }
-    // Optional: Check for time conflicts with other meetings (would require complex query)
+
+    if (!formData.start) {
+      errors.start = "Start date and time are required.";
+    }
+
+    if (!formData.end) {
+      errors.end = "End date and time are required.";
+    }
+
+    // בצע בדיקה רק אם שני התאריכים קיימים
+    if (formData.start && formData.end) {
+        try {
+            // ✨ שינוי מרכזי: המר את שני הצדדים לאובייקטי Date לפני השוואה ✨
+            // זה מבטיח שאנחנו משווים תפוחים לתפוחים (Date ל-Date)
+            // ולא תפוחים לתפוזים (string ל-Timestamp)
+            const startDate = new Date(formData.start.toDate ? formData.start.toDate() : formData.start);
+            const endDate = new Date(formData.end.toDate ? formData.end.toDate() : formData.end);
+
+            if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                throw new Error("Invalid date format detected.");
+            }
+
+            if (startDate >= endDate) {
+                errors.end = "End time must be after start time.";
+            }
+        } catch (e) {
+            errors.start = errors.start || "Invalid date format.";
+            errors.end = errors.end || "Invalid date format.";
+        }
+    }
+
+    if (!formData.lecturerId) {
+      errors.lecturerId = "Lecturer is required.";
+    }
+
+    if (!formData.roomCode) {
+      errors.roomCode = "Room is required.";
+    }
+
+    if (!formData.courseCode?.trim()) {
+      errors.courseCode = "Associated course code is required. This should be automatic.";
+    }
+    
     return errors;
 };
 

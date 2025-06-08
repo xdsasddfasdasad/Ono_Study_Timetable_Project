@@ -14,14 +14,14 @@ const isDateBlocked = (date, blockedRanges) => {
 // Generate course meeting objects in memory (logic remains the same)
 export const generateCourseMeetings = (courseDefinition, semester, holidaysAndVacations = []) => {
   const meetings = [];
-  if (!courseDefinition?.courseCode || !Array.isArray(courseDefinition.hours) || courseDefinition.hours.length === 0) return meetings;
-  if (!semester?.semesterCode || !semester.startDate || !semester.endDate) return meetings;
-  if (courseDefinition.semesterCode !== semester.semesterCode) return meetings;
+  if (!courseDefinition?.courseCode || !Array.isArray(courseDefinition.hours) || !semester?.startDate || !semester.endDate) {
+    return meetings;
+  }
 
   try {
     const semesterStart = new Date(semester.startDate + 'T00:00:00Z');
-    const semesterEnd = new Date(semester.endDate + 'T00:00:00Z');
-    if (isNaN(semesterStart.getTime()) || isNaN(semesterEnd.getTime()) || semesterStart > semesterEnd) return meetings;
+    const semesterEnd = new Date(semester.endDate + 'T23:59:59Z');
+    if (isNaN(semesterStart.getTime()) || isNaN(semesterEnd.getTime())) return meetings;
 
     let currentDate = new Date(semesterStart);
     while (currentDate <= semesterEnd) {
@@ -31,23 +31,41 @@ export const generateCourseMeetings = (courseDefinition, semester, holidaysAndVa
 
       if (weekDay && !isDateBlocked(currentDate, holidaysAndVacations)) {
         const matchingSlots = courseDefinition.hours.filter(h => h.day === weekDay && h.start && h.end);
+        
         matchingSlots.forEach(slot => {
           const meetingId = `CM-${courseDefinition.courseCode}-${dateStr}-${slot.start.replace(':', '')}`;
-          meetings.push({
-            id: meetingId, courseCode: courseDefinition.courseCode, courseName: courseDefinition.courseName || "",
-            type: "courseMeeting", date: dateStr, startHour: slot.start, endHour: slot.end, allDay: false,
-            semesterCode: semester.semesterCode, lecturerId: courseDefinition.lecturerId || null,
-            roomCode: courseDefinition.roomCode || null, notes: courseDefinition.notes || "",
-            zoomMeetinglink: courseDefinition.zoomMeetinglink || "",
-          });
+          
+          // --- שינוי מרכזי: יצירת אובייקטי Date מלאים ---
+          const startDateTime = new Date(`${dateStr}T${slot.start}:00Z`); // הוספת Z מציינת UTC
+          const endDateTime = new Date(`${dateStr}T${slot.end}:00Z`);
+
+          if (!isNaN(startDateTime.getTime()) && !isNaN(endDateTime.getTime())) {
+            meetings.push({
+              id: meetingId,
+              title: courseDefinition.courseName || `Meeting for ${courseDefinition.courseCode}`, // הוספת כותרת ברירת מחדל
+              courseCode: courseDefinition.courseCode,
+              type: "courseMeeting",
+              // --- שמירת שדות תאריך מלאים במקום שדות נפרדים ---
+              start: startDateTime,
+              end: endDateTime,
+              allDay: false,
+              semesterCode: semester.semesterCode,
+              lecturerId: courseDefinition.lecturerId || null,
+              roomCode: courseDefinition.roomCode || null,
+              notes: courseDefinition.notes || "",
+              zoomMeetinglink: courseDefinition.zoomMeetinglink || "",
+            });
+          }
         });
       }
       currentDate.setUTCDate(currentDate.getUTCDate() + 1);
     }
-  } catch (error) { console.error(`[Generator] Error generating meetings for ${courseDefinition?.courseCode}:`, error); return []; }
+  } catch (error) { console.error(`[Generator] Error for ${courseDefinition?.courseCode}:`, error); return []; }
+  
   console.log(`[Generator] Generated ${meetings.length} meetings in memory for ${courseDefinition.courseCode}.`);
   return meetings;
 };
+
 
 
 // --- Firestore Interaction Functions ---

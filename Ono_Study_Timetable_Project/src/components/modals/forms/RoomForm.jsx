@@ -37,7 +37,6 @@ export default function RoomForm({
               value={formData.siteCode || ""}
               onChange={onChange}
               label="Parent Site"
-              disabled={mode === 'edit'}
             >
               <MenuItem value="" disabled><em>Select site...</em></MenuItem>
               {siteOptions.length > 0 ? (

@@ -1,154 +1,148 @@
-// src/pages/TimeTableManagementPage.jsx
-
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Button, Stack, CircularProgress, Typography, Box, Alert } from "@mui/material";
 import FullCalendarView from "../../components/calendar/FullCalendarView";
 import TimeTableCalendarManageModal from "../../components/modals/TimeTableCalendarManageModal";
+import EntitiesManageModal from "../../components/modals/EntitiesManageModal";
 import ManageCourseDefinitionModal from "../../components/modals/ManageCourseDefinitionModal";
-// --- FIX 1: Import the central EventsContext ---
+import ManageCourseMeetingsModal from "../../components/modals/ManageCourseMeetingsModal";
 import { useEvents } from "../../context/EventsContext";
-import { fetchCollection } from "../../firebase/firestoreService"; // Keep for fetching courses for the modal
+import { fetchCollection } from "../../firebase/firestoreService";
 
 export default function TimeTableManagementPage() {
-    // --- FIX 2: Consume data and functions from the context ---
+    // === STATE MANAGEMENT ===
     const { allVisibleEvents, isLoadingEvents, refreshEvents, error: eventsError } = useEvents();
+    const [allCourses, setAllCourses] = useState([]);
+    const [isLoadingCourses, setIsLoadingCourses] = useState(true);
 
-    // --- State for this page is now ONLY for controlling modals ---
-    const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
-    const [selectedEventData, setSelectedEventData] = useState(null);
-    const [selectedRecordType, setSelectedRecordType] = useState(null);
-    const [modalDefaultDate, setModalDefaultDate] = useState(null);
-    const [isManageEntitiesOpen, setIsManageEntitiesOpen] = useState(false);
-    const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
-    const [courseToEdit, setCourseToEdit] = useState(null);
-    
-    // State to hold course definitions specifically for the ManageCourseDefinitionModal
-    const [existingCourses, setExistingCourses] = useState([]);
-    const [isLoadingCourses, setIsLoadingCourses] = useState(false);
+    const [activeModal, setActiveModal] = useState(null);
+    const [modalData, setModalData] = useState(null);
 
-
-    // --- Event Handlers for Calendar Interactions ---
-    const handleDateClick = useCallback((info) => {
-        setSelectedEventData(null);
-        setSelectedRecordType(null);
-        setModalDefaultDate(info.dateStr || new Date().toISOString().split('T')[0]);
-        setIsCalendarModalOpen(true); // This opens the "Add" part of the manage modal
-    }, []);
-
-    const handleEventClick = useCallback((info) => {
-        const props = info.event.extendedProps;
-        // The recordType is now part of extendedProps from getAllVisibleEvents
-        const recordTypeForModal = props?.type === 'courseMeeting' ? 'courseMeeting' : props?.type;
-
-        if (!recordTypeForModal) {
-            alert("This event cannot be edited.");
-            return;
-        }
-
-        // The "Manage Courses" modal is used for 'course' type, not the generic edit modal.
-        if (recordTypeForModal === 'course') {
-            handleOpenCourseModal(props);
-            return;
-        }
-
-        setSelectedEventData(props);
-        setSelectedRecordType(recordTypeForModal);
-        setModalDefaultDate(null);
-        setIsCalendarModalOpen(true); // This opens the "Edit" part of the manage modal
-    }, []);
-
-    // --- Modal Control Handlers ---
-    const handleCloseAllModals = () => {
-        setIsCalendarModalOpen(false);
-        setIsCourseModalOpen(false);
-        setIsManageEntitiesOpen(false);
-        setSelectedEventData(null);
-        setSelectedRecordType(null);
-        setModalDefaultDate(null);
-        setCourseToEdit(null);
-    };
-
-    const handleOpenCourseModal = async (courseData = null) => {
-        setCourseToEdit(courseData);
+    // === DATA FETCHING ===
+    const loadCourseList = useCallback(async () => {
         setIsLoadingCourses(true);
         try {
-            const courses = await fetchCollection("courses");
-            setExistingCourses(courses || []);
-        } catch (e) {
-            console.error("Failed to fetch courses for modal", e);
-            setExistingCourses([]);
-        } finally {
-            setIsLoadingCourses(false);
-            setIsCourseModalOpen(true);
-        }
-    };
-    
-    // This single handler is called on successful save/delete from ANY modal
+            setAllCourses(await fetchCollection("courses") || []);
+        } catch (err) { console.error("Error loading course list:", err);
+        } finally { setIsLoadingCourses(false); }
+    }, []);
+
+    useEffect(() => {
+        loadCourseList();
+    }, [loadCourseList]);
+
+    const adminCalendarEvents = useMemo(() => {
+        return allVisibleEvents.filter(event => event.extendedProps?.type !== 'studentEvent');
+    }, [allVisibleEvents]);
+
+    // === HANDLERS ===
+    const handleCloseModals = useCallback(() => {
+        setActiveModal(null);
+        setModalData(null);
+    }, []);
+
     const handleSaveSuccess = useCallback(() => {
-        handleCloseAllModals();
-        refreshEvents(); // Simply tell the context to refresh all data
-    }, [refreshEvents]);
+        handleCloseModals();
+        refreshEvents();
+        loadCourseList();
+    }, [refreshEvents, loadCourseList, handleCloseModals]);
+    
+    // --- ✨ לוגיקה חדשה, פשוטה ואמינה לפתיחת מודאלים ---
+    
+    // פונקציה לפתיחת מודאל הוספה
+    const openAddModal = (defaultDate = null) => {
+        setModalData({ isEditing: false, defaultDate: defaultDate });
+        setActiveModal('generic');
+    };
 
+    // פונקציה לפתיחת מודאל עריכה
+    const openEditModal = (eventData) => {
+        // ודא שה-type הנכון נמצא בנתונים
+        let recordType = eventData.type;
+        if (eventData.type === 'yearMarker') recordType = 'year';
+        if (eventData.type === 'semesterMarker') recordType = 'semester';
+        
+        setModalData({ isEditing: true, data: { ...eventData, type: recordType } });
+        setActiveModal('generic');
+    };
 
-    // --- Main Render Logic ---
+    const handleEventClick = useCallback((clickInfo) => {
+        const props = clickInfo.event.extendedProps;
+        console.log("Event clicked:", props);
+
+        switch (props?.type) {
+            case 'courseMeeting':
+                setModalData(props); // נתונים למודאל פגישות
+                setActiveModal('courseMeetings');
+                break;
+            
+            // כל אלו יפתחו את מודאל העריכה הגנרי
+            case 'holiday':
+            case 'vacation':
+            case 'event':
+            case 'task':
+            case 'yearMarker': // שם הסוג מ-getAllVisibleEvents
+            case 'semesterMarker': // שם הסוג מ-getAllVisibleEvents
+                openEditModal(props);
+                break;
+
+            default:
+                alert(`Cannot edit '${props.type}' from the calendar.`);
+                break;
+        }
+    }, []);
+
+    const handleDateClick = useCallback((dateClickInfo) => {
+        openAddModal(dateClickInfo.dateStr);
+    }, []);
+
+    // === RENDER LOGIC ===
+    const isCurrentlyLoading = isLoadingEvents || isLoadingCourses;
+
     return (
         <Box sx={{ padding: { xs: "1rem", md: "2rem" }, maxWidth: "1500px", margin: "auto" }}>
-            <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 3 }}>
-                Timetable Management Console
-            </Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mb={3} justifyContent="center" flexWrap="wrap">
-                <Button variant="contained" color="primary" onClick={handleDateClick}>
-                    Add Calendar Entry
-                </Button>
-                <Button variant="contained" color="secondary" onClick={() => handleOpenCourseModal(null)}>
-                    Manage Courses
-                </Button>
-                <Button variant="outlined" onClick={() => setIsManageEntitiesOpen(true)}>
-                    Manage Entities
-                </Button>
+            <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 3 }}>Timetable Management Console</Typography>
+            {eventsError && <Alert severity="error" sx={{ mb: 2 }}>{`Calendar data error: ${eventsError}`}</Alert>}
+
+            <Stack direction="row" spacing={2} mb={3} justifyContent="center" flexWrap="wrap">
+                <Button variant="contained" onClick={() => openAddModal(new Date().toISOString().split('T')[0])}>Add Entry</Button>
+                <Button variant="contained" color="secondary" onClick={() => setActiveModal('courseDef')}>Manage Courses</Button>
+                <Button variant="contained" onClick={() => setActiveModal('courseMeetings')}>Manage Meetings</Button>
+                <Button variant="outlined" onClick={() => setActiveModal('entities')}>Manage Entities</Button>
             </Stack>
 
-            {eventsError && <Alert severity="error" sx={{ mb: 2 }}>{`Error: ${eventsError}`}</Alert>}
-            
-            {isLoadingEvents ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}>
-                    <CircularProgress />
-                    <Typography sx={{ml:2}}>Loading Timetable Data...</Typography>
-                </Box>
+            {isCurrentlyLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}><CircularProgress /></Box>
             ) : (
                 <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', boxShadow: 1, p: 1 }}>
-                    <FullCalendarView
-                        events={allVisibleEvents}
-                        onDateClick={handleDateClick}
-                        onEventClick={handleEventClick}
-                    />
+                    <FullCalendarView events={adminCalendarEvents} onDateClick={handleDateClick} onEventClick={handleEventClick} />
                 </Box>
             )}
 
-            {/* --- Modals --- */}
-            {(isCalendarModalOpen || isManageEntitiesOpen) && (
+            {/* --- All Modals --- */}
+            
+            {/* ✨ --- קריאה פשוטה וברורה למודאל הגנרי --- ✨ */}
+            {activeModal === 'generic' && (
                 <TimeTableCalendarManageModal
-                    open={isCalendarModalOpen}
-                    onClose={handleCloseAllModals}
+                    open={true}
+                    onClose={handleCloseModals}
                     onSave={handleSaveSuccess}
-                    initialData={selectedEventData}
-                    recordType={selectedRecordType}
-                    defaultDate={modalDefaultDate}
-                    manageEntitiesOpen={isManageEntitiesOpen}
-                    setManageEntitiesOpen={setIsManageEntitiesOpen}
+                    // המודאל יקבל את כל הנתונים ויחליט בעצמו אם להציג הוספה או עריכה
+                    initialData={modalData?.data}
+                    defaultDate={modalData?.defaultDate}
                 />
             )}
             
-            {isCourseModalOpen && (
-                <ManageCourseDefinitionModal
-                    open={isCourseModalOpen}
-                    onClose={handleCloseAllModals}
-                    onSaveSuccess={handleSaveSuccess}
-                    initialData={courseToEdit}
-                    existingCourses={existingCourses}
-                    isLoadingCourses={isLoadingCourses}
-                />
-            )}
+            <EntitiesManageModal open={activeModal === 'entities'} onClose={handleCloseModals} onSaveSuccess={handleSaveSuccess} />
+            <ManageCourseDefinitionModal open={activeModal === 'courseDef'} onClose={handleCloseModals} onSaveSuccess={handleSaveSuccess} existingCourses={allCourses} isLoadingCourses={isLoadingCourses} />
+            <ManageCourseMeetingsModal
+                open={activeModal === 'courseMeetings'}
+                onClose={handleCloseModals}
+                onSaveSuccess={handleSaveSuccess}
+                existingCourses={allCourses}
+                isLoadingCourses={isLoadingCourses}
+                initialCourseCode={modalData?.courseCode}
+                initialMeetingId={modalData?.id}
+            />
         </Box>
     );
 }

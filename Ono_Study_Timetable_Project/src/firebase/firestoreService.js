@@ -255,3 +255,22 @@ export const fetchAllRooms = async () => {
          return allRooms;
      } catch (error) { console.error("[Firestore] Error fetching all rooms:", error); throw error; }
  };
+
+ /**
+ * Fetches documents from a collection that match a specific query.
+ * @param {string} collectionName - The name of the collection.
+ * @param {Array} queryConstraints - An array of query constraints, e.g., [where("courseId", "==", "some-id")].
+ * @returns {Promise<Array|null>} - A promise that resolves to an array of documents or null on error.
+ */
+export const fetchCollectionWithQuery = async (collectionName, queryConstraints = []) => {
+    try {
+        const collRef = collection(db, collectionName);
+        const q = query(collRef, ...queryConstraints); // Apply all constraints
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error(`Error fetching collection '${collectionName}' with query:`, error);
+        // You might want to re-throw the error or handle it as needed
+        throw error; 
+    }
+};

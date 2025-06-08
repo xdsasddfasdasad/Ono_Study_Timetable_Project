@@ -30,12 +30,10 @@ const EVENT_ICONS = {
 };
 
 export const getAllVisibleEvents = async (currentUser = null) => {
-  // Use Firebase UID as the single source of truth for filtering
   const userUID = currentUser?.uid;
   console.log(`[getAllVisibleEvents] Fetching all events. Personal events for UID: ${userUID || 'Guest'}`);
 
   try {
-    // Restore the full Promise.all call to fetch all data sources correctly
     const [
       rawMeetings, rawGeneralEvents, rawHolidays, rawVacations, rawTasks,
       allRawStudentEvents, years, lecturersMap,
@@ -48,23 +46,28 @@ export const getAllVisibleEvents = async (currentUser = null) => {
 
     const allEvents = [];
     const addEvent = (event) => {
-      // Ensure the event has a type in its extendedProps for filtering/display logic later
-      if (!event.extendedProps || !event.extendedProps.type) {
-          console.warn("Event is missing type in extendedProps", event);
-          return;
-      }
-      allEvents.push(event);
+        if (!event || !event.extendedProps?.type) return;
+        allEvents.push(event);
     };
 
-    // Course Meetings
     (rawMeetings || []).forEach(m => {
-      if (!m.date || !m.startHour) return;
+      // ודא שהשדות המודרניים (start/end) קיימים
+      if (!m.start) return; 
+      
+      // המר את ה-Timestamp ל-Date object. זה הכרחי עבור FullCalendar.
+      const startDate = m.start.toDate ? m.start.toDate() : new Date(m.start);
+      const endDate = m.end?.toDate ? m.end.toDate() : (m.end ? new Date(m.end) : null);
+
+      if (isNaN(startDate.getTime())) return; // ודא שהתאריך תקין
+
       addEvent({
         id: m.id,
-        title: `${EVENT_ICONS.courseMeeting} ${m.courseName}`,
-        start: `${m.date}T${m.startHour}`,
-        end: m.endHour ? `${m.date}T${m.endHour}` : undefined,
+        title: `${EVENT_ICONS.courseMeeting} ${m.title || m.courseName}`, // שימוש בשדה title
+        start: startDate, // העבר Date object
+        end: endDate,     // העבר Date object או null
         allDay: false,
+        backgroundColor: '#3788d8', // צבע ברירת מחדל של FullCalendar
+        borderColor: '#3788d8',
         extendedProps: { ...m, type: 'courseMeeting', lecturerName: lecturersMap.get(m.lecturerId) }
       });
     });
@@ -169,8 +172,7 @@ export const getAllVisibleEvents = async (currentUser = null) => {
     return allEvents;
   
   } catch(error) {
-    console.error("[getAllVisibleEvents] A critical error occurred during data fetching or processing:", error);
-    // In case of a failure in Promise.all or elsewhere, return an empty array to prevent app crash
+    console.error("[getAllVisibleEvents] Critical error:", error);
     return [];
   }
 };

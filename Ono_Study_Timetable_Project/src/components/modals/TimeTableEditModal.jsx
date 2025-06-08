@@ -1,5 +1,3 @@
-// src/components/modals/TimeTableEditModal.jsx
-
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Stack, Alert, Box, CircularProgress, Typography, Button, DialogContent, DialogActions
@@ -9,44 +7,45 @@ import { formMappings } from "../../utils/formMappings";
 import { handleSaveOrUpdateRecord, handleDeleteEntity } from "../../handlers/formHandlers";
 import { fetchCollection } from "../../firebase/firestoreService";
 
-// Import all possible form components (same as AddModal)
+// --- שלב 1: ייבוא רק של הטפסים הרלוונטיים ---
 import YearForm from "./forms/YearForm";
 import SemesterForm from "./forms/SemesterForm";
-import LecturerForm from "./forms/LecturerForm";
-import CourseMeetingForm from "./forms/CourseMeetingForm";
 import TaskForm from "./forms/TaskForm";
-import SiteForm from "./forms/SiteForm";
-import RoomForm from "./forms/RoomForm";
 import HolidayForm from "./forms/HolidayForm";
 import VacationForm from "./forms/VacationForm";
 import EventForm from "./forms/EventForm";
 
+// --- שלב 2: מיפוי רק של הטפסים הרלוונטיים ---
 const formComponentMap = {
-    year: YearForm, semester: SemesterForm, lecturer: LecturerForm,
-    courseMeeting: CourseMeetingForm, task: TaskForm, site: SiteForm,
-    room: RoomForm, holiday: HolidayForm, vacation: VacationForm, event: EventForm,
+    year: YearForm,
+    semester: SemesterForm,
+    task: TaskForm,
+    holiday: HolidayForm,
+    vacation: VacationForm,
+    event: EventForm,
 };
 
-// Re-using the same helper from AddModal
-const loadSelectOptionsAsync = async () => { /* ... (exact same implementation) ... */
+// --- שלב 3: פונקציית עזר רזה שטוענת רק מה שצריך ---
+const loadSelectOptionsAsync = async () => {
     try {
-        const [years, sites, lecturers, courses] = await Promise.all([
-            fetchCollection("years"), fetchCollection("sites"),
-            fetchCollection("lecturers"), fetchCollection("courses")
+        const [years, courses] = await Promise.all([
+            fetchCollection("years"),
+            fetchCollection("courses")
         ]);
-        const allSemesters = (years || []).flatMap(y => (y.semesters || []).map(s => ({ value: s.semesterCode, label: `Sem ${s.semesterNumber} / Y${y.yearNumber}` })));
-        const allRooms = (sites || []).flatMap(site => (site.rooms || []).map(room => ({ value: room.roomCode, label: `${room.roomName} @ ${site.siteName}` })));
         return {
             years: (years || []).map(y => ({ value: y.yearCode, label: `Year ${y.yearNumber}` })),
-            sites: (sites || []).map(s => ({ value: s.siteCode, label: s.siteName })),
-            lecturers: (lecturers || []).map(l => ({ value: l.id, label: `${l.name} (${l.id})` })),
             courses: (courses || []).map(c => ({ value: c.courseCode, label: `${c.courseName} (${c.courseCode})` })),
-            semesters: allSemesters, rooms: allRooms,
         };
-    } catch (error) { return {}; }
+    } catch (error) { 
+        console.error("[EditModal:LoadOptions] Error:", error);
+        return {};
+    }
 };
 
-export default function TimeTableEditModal({ open, onClose, onSave, initialData, recordType }) {
+export default function TimeTableEditModal({ open, onClose, onSave, initialData }) {
+    // ה-recordType מגיע עכשיו מ-initialData.type
+    const recordType = initialData?.type;
+
     const [formData, setFormData] = useState({});
     const [errors, setErrors] = useState({});
     const [generalError, setGeneralError] = useState("");
@@ -65,13 +64,12 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData,
             setIsLoadingOptions(false);
             setErrors({}); setGeneralError("");
         }
-    }, [open, initialData, recordType]);
+    }, [open, initialData]);
 
-    const handleFormChange = useCallback((eventOrData) => { /* ... (Same as AddModal) ... */
-        const { name, value } = eventOrData.target 
-          ? { name: eventOrData.target.name, value: eventOrData.target.type === 'checkbox' ? eventOrData.target.checked : eventOrData.target.value }
-          : { name: eventOrData.name, value: eventOrData.value };
-        setFormData(prev => ({ ...prev, [name]: value }));
+    const handleFormChange = useCallback((event) => {
+        const { name, value, type, checked } = event.target;
+        const finalValue = type === 'checkbox' ? checked : value;
+        setFormData(prev => ({ ...prev, [name]: finalValue }));
         if (errors[name]) setErrors(prev => { const newErrors = {...prev}; delete newErrors[name]; return newErrors; });
     }, [errors]);
 
@@ -79,10 +77,9 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData,
         if (!recordType || !formData) return;
         setIsLoading(true); setErrors({}); setGeneralError("");
 
-        const mapping = formMappings[recordType];
         const result = await handleSaveOrUpdateRecord(
-            mapping.collectionName, formData, "edit",
-            { recordType, editingId: formData[mapping.primaryKey] }
+            formMappings[recordType].collectionName, formData, "edit",
+            { recordType, editingId: formData[formMappings[recordType].primaryKey] }
         );
         setIsLoading(false);
 
@@ -96,23 +93,20 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData,
 
     const handleDeleteClick = useCallback(async () => {
         if (!recordType || !formData) return;
-
         const mapping = formMappings[recordType];
         const recordId = formData[mapping.primaryKey];
-        const recordLabel = formData.name || formData.eventName || recordId;
+        const recordLabel = formData.eventName || formData.holidayName || formData.vacationName || formData.assignmentName || formData.yearNumber || formData.semesterNumber || recordId;
 
         if (!window.confirm(`DELETE ${mapping.label}:\n"${recordLabel}"\n\nThis action cannot be undone.`)) return;
         setIsDeleting(true);
 
-        const options = {};
-        if (recordType === 'semester') options.parentDocId = formData.yearCode;
-        if (recordType === 'room') options.parentDocId = formData.siteCode;
-
-        const result = await handleDeleteEntity(mapping.collectionName, recordId, options);
+        const result = await handleDeleteEntity(mapping.collectionName, recordId, { 
+            recordType: recordType,
+            parentDocId: formData.yearCode // רלוונטי רק למחיקת סמסטר
+        });
         setIsDeleting(false);
 
         if (result.success) {
-            alert(result.message);
             onSave?.(); onClose?.();
         } else {
             setGeneralError(result.message || "Failed to delete record.");
@@ -124,8 +118,10 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData,
             <DialogContent>
               <Stack spacing={3} sx={{ minWidth: { sm: 500 }, pt: 1 }}>
                   {generalError && <Alert severity="error">{generalError}</Alert>}
-                  {isLoadingOptions && <Box sx={{ display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>}
-                  {FormComponent && !isLoadingOptions ? (
+                  
+                  {isLoadingOptions ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>
+                  ) : FormComponent ? (
                       <FormComponent
                           formData={formData}
                           errors={errors}
@@ -133,7 +129,8 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData,
                           mode="edit"
                           selectOptions={selectOptions}
                       />
-                  ) : <Typography>Form not available.</Typography>}
+                  ) : <Typography>Form not available for this record type.</Typography>}
+
               </Stack>
             </DialogContent>
             <DialogActions sx={{ p: '16px 24px', justifyContent: 'space-between' }}>

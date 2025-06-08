@@ -116,9 +116,8 @@ export default function HomePage() {
                  <HomeActionCard title="Quick Add Event" description="Add a personal event to your calendar." icon={AddCircleOutlineIcon} onClick={handleOpenQuickAdd} color="success" />
                  <HomeActionCard title="Help & Support" description="Find answers and guides." icon={HelpOutlineIcon} to="/help" color="info" />
                 <Grid item xs={12}><Divider sx={{my: 3}}><Chip label="Management Tools"/></Divider></Grid>
-                <HomeActionCard title="Manage Timetable" description="Administer all calendar entries." icon={SettingsIcon} to="/manage-timetable" color="secondary" />
-                <HomeActionCard title="Manage Courses" description="Define courses and schedules." icon={SchoolIcon} to="/manage-timetable" color="secondary" />
-                <HomeActionCard title="Manage Students" description="Handle student accounts." icon={SupervisedUserCircleIcon} to="/manage-students" color="secondary" />
+                <HomeActionCard title="Manage Timetable" description="Administer all calendar entries." icon={SettingsIcon} to="/timetable/management"color="secondary" />
+                <HomeActionCard title="Manage Students" description="Handle student accounts." icon={SupervisedUserCircleIcon} to="/students" color="secondary" />
             </Grid>
 
             {isModalOpen && (

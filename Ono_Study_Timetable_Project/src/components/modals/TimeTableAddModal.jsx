@@ -1,62 +1,61 @@
-// src/components/modals/TimeTableAddModal.jsx
-
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  Stack, MenuItem, Select, InputLabel, FormControl, Alert, Box, CircularProgress, Typography, Button
+  Stack, MenuItem, Select, InputLabel, FormControl, Alert, Box, CircularProgress, Typography, DialogContent, DialogActions, Button
 } from "@mui/material";
 import PopupModal from "../UI/PopupModal";
 import { formMappings } from "../../utils/formMappings";
 import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers";
 import { fetchCollection } from "../../firebase/firestoreService";
 
-// Import all possible form components dynamically
+// --- שלב 1: ייבוא רק של הטפסים הרלוונטיים ---
 import YearForm from "./forms/YearForm";
 import SemesterForm from "./forms/SemesterForm";
-import LecturerForm from "./forms/LecturerForm";
-import CourseMeetingForm from "./forms/CourseMeetingForm";
 import TaskForm from "./forms/TaskForm";
-import SiteForm from "./forms/SiteForm";
-import RoomForm from "./forms/RoomForm";
 import HolidayForm from "./forms/HolidayForm";
 import VacationForm from "./forms/VacationForm";
 import EventForm from "./forms/EventForm";
 
+// --- שלב 2: מיפוי רק של הטפסים הרלוונטיים ---
 const formComponentMap = {
-  year: YearForm, semester: SemesterForm, lecturer: LecturerForm,
-  courseMeeting: CourseMeetingForm, task: TaskForm, site: SiteForm,
-  room: RoomForm, holiday: HolidayForm, vacation: VacationForm, event: EventForm,
+  year: YearForm,
+  semester: SemesterForm,
+  task: TaskForm,
+  holiday: HolidayForm,
+  vacation: VacationForm,
+  event: EventForm,
 };
 
-const addableRecordTypes = Object.entries(formMappings)
-    .filter(([key]) => key in formComponentMap)
-    .map(([key, value]) => ({ key, label: value.label }))
-    .sort((a, b) => a.label.localeCompare(b.label)); // Sort alphabetically for user convenience
+// רשימת הישויות שניתן להוסיף במודאל זה
+const ADDABLE_ENTITY_TYPES = {
+  event: "General Event",
+  holiday: "Holiday",
+  vacation: "Vacation",
+  task: "Task / Assignment",
+  semester: "Semester (into existing Year)",
+  year: "Academic Year",
+};
 
-// This helper is used by both Add and Edit modals
+// --- שלב 3: פונקציית עזר רזה שטוענת רק מה שצריך ---
 const loadSelectOptionsAsync = async () => {
     try {
-        const [years, sites, lecturers, courses] = await Promise.all([
-            fetchCollection("years"), fetchCollection("sites"),
-            fetchCollection("lecturers"), fetchCollection("courses")
+        // טפסים אלו צריכים רק רשימת שנים (עבור סמסטרים) וקורסים (עבור משימות)
+        const [years, courses] = await Promise.all([
+            fetchCollection("years"),
+            fetchCollection("courses")
         ]);
-        const allSemesters = (years || []).flatMap(y => (y.semesters || []).map(s => ({ value: s.semesterCode, label: `Sem ${s.semesterNumber} / Y${y.yearNumber}` })));
-        const allRooms = (sites || []).flatMap(site => (site.rooms || []).map(room => ({ value: room.roomCode, label: `${room.roomName} @ ${site.siteName}` })));
         return {
             years: (years || []).map(y => ({ value: y.yearCode, label: `Year ${y.yearNumber}` })),
-            sites: (sites || []).map(s => ({ value: s.siteCode, label: s.siteName })),
-            lecturers: (lecturers || []).map(l => ({ value: l.id, label: `${l.name} (${l.id})` })),
             courses: (courses || []).map(c => ({ value: c.courseCode, label: `${c.courseName} (${c.courseCode})` })),
-            semesters: allSemesters, rooms: allRooms,
         };
     } catch (error) {
-         console.error("[Modal:LoadOptions] Error:", error);
-         return { years: [], sites: [], lecturers: [], courses: [], semesters: [], rooms: [] };
+         console.error("[AddModal:LoadOptions] Error:", error);
+         return { years: [], courses: [] };
     }
 };
 
 export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }) {
   const [recordType, setRecordType] = useState("");
-  const [formData, setFormData] = useState({});
+  const [formData, setFormData] = useState(null);
   const [errors, setErrors] = useState({});
   const [generalError, setGeneralError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -73,7 +72,8 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
         setIsLoadingOptions(false);
       });
     } else {
-      setRecordType(""); setFormData({}); setErrors({}); setGeneralError(""); setIsLoading(false);
+      // איפוס מלא בסגירה
+      setRecordType(""); setFormData(null); setErrors({}); setGeneralError("");
     }
   }, [open]);
 
@@ -81,35 +81,26 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
     if (recordType && open) {
       const defaultValues = defaultDate ? { startDate: defaultDate } : {};
       const initialData = formMappings[recordType]?.initialData(defaultValues);
-      setFormData(initialData || {});
+      setFormData(initialData || null);
       setErrors({}); setGeneralError("");
     } else {
-      setFormData({});
+      setFormData(null);
     }
   }, [recordType, defaultDate, open]);
   
-  const handleFormChange = useCallback((eventOrData) => {
-    const { name, value } = eventOrData.target 
-      ? { name: eventOrData.target.name, value: eventOrData.target.type === 'checkbox' ? eventOrData.target.checked : eventOrData.target.value }
-      : { name: eventOrData.name, value: eventOrData.value };
-    
-    setFormData(prev => ({ ...prev, [name]: value }));
+  const handleFormChange = useCallback((event) => {
+    const { name, value, type, checked } = event.target;
+    const finalValue = type === 'checkbox' ? checked : value;
+    setFormData(prev => ({ ...prev, [name]: finalValue }));
     if (errors[name]) setErrors(prev => { const newErrors = {...prev}; delete newErrors[name]; return newErrors; });
   }, [errors]);
 
   const handleSaveClick = useCallback(async () => {
-    if (!recordType) return;
+    if (!recordType || !formData) return;
     setIsLoading(true); setErrors({}); setGeneralError("");
 
-    const mapping = formMappings[recordType];
-    if (!mapping) {
-      setIsLoading(false);
-      setGeneralError("Configuration error: Cannot find mapping for this record type.");
-      return;
-    }
-
     const result = await handleSaveOrUpdateRecord(
-        mapping.collectionName, formData, "add", { recordType }
+        formMappings[recordType].collectionName, formData, "add", { recordType }
     );
     setIsLoading(false);
 
@@ -118,33 +109,37 @@ export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }
       onClose?.();
     } else {
       setErrors(result.errors || {});
-      setGeneralError(result.message || "Failed to save record. Please check the form for errors.");
+      setGeneralError(result.message || "Failed to save record.");
     }
   }, [recordType, formData, onSave, onClose]);
 
+  const handleRecordTypeChange = (e) => {
+    setRecordType(e.target.value);
+  };
+
   return (
-    <PopupModal open={open} onClose={onClose} title={`Add New ${formMappings[recordType]?.label || 'Record'}`}>
+    <PopupModal open={open} onClose={onClose} title={`Add New Record`}>
        <DialogContent>
           <Stack spacing={3} sx={{ minWidth: { sm: 500 }, pt: 1 }}>
               <FormControl fullWidth disabled={isLoading || isLoadingOptions}>
-                  <InputLabel id="add-record-type-label">Record Type</InputLabel>
+                  <InputLabel id="add-record-type-label">Type of Record to Add</InputLabel>
                   <Select
-                      labelId="add-record-type-label"
-                      label="Record Type"
-                      value={recordType}
-                      onChange={(e) => setRecordType(e.target.value)}
-                  >
-                      {addableRecordTypes.map(({ key, label }) => (
-                          <MenuItem key={key} value={key}>{label}</MenuItem>
-                      ))}
+                    labelId="add-record-type-label"
+                    value={recordType}
+                    label="Type of Record to Add"
+                    onChange={handleRecordTypeChange}
+                >
+                    <MenuItem value="" disabled><em>Select type...</em></MenuItem>
+                    {Object.entries(ADDABLE_ENTITY_TYPES).map(([key, label]) => (
+                        <MenuItem key={key} value={key}>{label}</MenuItem>
+                    ))}
                   </Select>
               </FormControl>
 
               {generalError && <Alert severity="error">{generalError}</Alert>}
-
               {isLoadingOptions && <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}><CircularProgress /></Box>}
 
-              {FormComponent && !isLoadingOptions && (
+              {formData && FormComponent && !isLoadingOptions && (
                   <FormComponent
                       formData={formData}
                       errors={errors}
