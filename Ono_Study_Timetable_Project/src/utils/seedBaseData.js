@@ -1,167 +1,112 @@
+// src/utils/seedBaseData.js
+
 import { dummyData } from "../data/dummyData";
-import { db } from "../firebase/firebaseConfig"; // Firebase DB instance
-import { collection, getDocs, setDoc, doc, writeBatch, query, limit } from "firebase/firestore";
-import { getAuth, createUserWithEmailAndPassword } from "firebase/auth"; // Firebase Auth functions
-import { app } from "../firebase/firebaseConfig"; // Firebase App instance
+import { db } from "../firebase/firebaseConfig";
+import { collection, setDoc, doc, writeBatch } from "firebase/firestore";
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 
-const auth = getAuth(app); // Initialize Firebase Auth
-
-// Helper to check if a collection likely has data (more efficient than fetching all)
-const isCollectionPopulated = async (collectionPath) => {
-    try {
-        const collectionRef = collection(db, collectionPath);
-        const q = query(collectionRef, limit(1)); // Query for just one document
-        const snapshot = await getDocs(q);
-        return !snapshot.empty; // True if NOT empty (i.e., populated)
-    } catch (error) {
-        // If collection doesn't exist or other error, assume it's not populated for seeding purposes
-        console.warn(`[SeedBase:isCollectionPopulated] Error checking '${collectionPath}', assuming not populated:`, error.message);
-        return false;
-    }
-};
-
-// Helper to get the field name from dummyData that contains the intended Document ID
-const getSeedIdField = (entityKey) => {
-     const map = {
-         students: "id", // In dummyData, 'id' is the studentIdCard (9-digit)
-         years: "yearCode", lecturers: "id", sites: "siteCode",
-         courses: "courseCode", holidays: "holidayCode", vacations: "vacationCode",
-         events: "eventCode", tasks: "assignmentCode", studentEvents: "eventCode"
-     };
-     return map[entityKey] || 'id'; // Default to 'id' if not mapped
-};
-
-/**
- * Seeds base data into Firestore and creates corresponding Auth users for students.
- * This function is designed to be idempotent to some extent for students
- * (won't recreate Auth user if email exists) and will overwrite other collections if forced.
- * @param {boolean} force - If true, will attempt to seed collections even if they seem populated.
- *                          For students, it won't force Auth user creation if email exists.
- */
-
+const auth = getAuth();
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-export const seedBaseData = async (force = false) => {
-  console.log(`[SeedBase] Attempting to seed base data. Force mode: ${force}`);
+/**
+ * Seeds all base data into Firestore. This is a destructive and complete operation.
+ * It first creates Firebase Auth users, maps their temporary usernames to their real UIDs,
+ * then seeds all general data, and finally seeds student-specific data with the correct UIDs.
+ */
+export const seedBaseData = async () => {
+  console.log(`[SeedBase] Starting full, clean seed process...`);
 
-  // --- 1. Seed Students: Create Firebase Auth user and Firestore profile document ---
-  const studentsCollectionName = "students";
-  try {
-    // Check if student seeding should proceed
-    const studentsShouldSeed = force || !(await isCollectionPopulated(studentsCollectionName));
+  const usernameToUidMap = new Map();
 
-    if (studentsShouldSeed) {
-      console.log(`[SeedBase] Seeding ${studentsCollectionName}... (Force: ${force})`);
-      const studentsToSeed = dummyData.students || [];
-      let createdAuthUsersCount = 0;
-      let createdFirestoreProfilesCount = 0;
-
- // ✅ Change from map + Promise.allSettled to a sequential for...of loop for rate limiting
-      for (const studentDataFromDummy of studentsToSeed) {
-        if (!studentDataFromDummy.email || !studentDataFromDummy.password || !studentDataFromDummy.id) {
-          console.warn("[SeedBase] Skipping student (missing data):", studentDataFromDummy.username || studentDataFromDummy.email);
-          continue;
-        }
-
-        let firebaseUID = null;
-
-        try {
-          console.log(`[SeedBase] Attempting to create Auth user for ${studentDataFromDummy.email}...`);
-          const userCredential = await createUserWithEmailAndPassword(auth, studentDataFromDummy.email, studentDataFromDummy.password);
-          firebaseUID = userCredential.user.uid;
-          console.log(`[SeedBase] SUCCESS: Auth user created for ${studentDataFromDummy.email} with UID: ${firebaseUID}`);
-          createdAuthUsersCount++;
-
-          const { password, id: idFromDummy, courseCodes, eventCodes, ...profileData } = studentDataFromDummy;
-          const firestoreProfileData = {
-            ...profileData, uid: firebaseUID, id: firebaseUID, studentIdCard: idFromDummy,
-            courseCodes: courseCodes || [], eventCodes: eventCodes || [],
-            createdAt: new Date().toISOString(),
-          };
-          const studentDocRef = doc(db, studentsCollectionName, firebaseUID);
-          await setDoc(studentDocRef, firestoreProfileData, { merge: true });
-          console.log(`[SeedBase] SUCCESS: Firestore profile created for ${profileData.username} (UID: ${firebaseUID})`);
-          createdFirestoreProfilesCount++;
-
-        } catch (authError) {
-          if (authError.code === 'auth/email-already-in-use') {
-            console.warn(`[SeedBase] Auth user for ${studentDataFromDummy.email} ALREADY EXISTS.`);
-          } else {
-            console.error(`[SeedBase] FAILED to create Auth user for ${studentDataFromDummy.email}:`, authError.message, `(Code: ${authError.code})`);
-            if (authError.code === 'auth/too-many-requests') {
-                 console.log("[SeedBase] Rate limit hit. Waiting before next attempt...");
-                 await delay(5000); // Wait 5 seconds before trying the next user
-                 // Optionally, you could retry the current user, but that complicates logic.
-                 // For seeding, just moving to the next after a delay is often simpler.
-            }
-          }
-        }
-        // ✅ Add a delay between each user creation attempt
-        console.log(`[SeedBase] Processed ${studentDataFromDummy.email}. Waiting before next...`);
-        await delay(1000); // Wait 1 second (1000ms). Adjust as needed.
+  // --- Step 1: Create Auth users and Firestore student profiles ---
+  console.log("Step 1: Seeding Students (Auth & Firestore)...");
+  const studentsToSeed = dummyData.students || [];
+  for (const studentData of studentsToSeed) {
+    try {
+      if (!studentData.email || !studentData.password || !studentData.username) {
+        console.warn(`Skipping student due to missing data:`, studentData);
+        continue;
       }
-      console.log(`[SeedBase] Student Seeding Summary: Auth users created: ${createdAuthUsersCount}, Firestore profiles created: ${createdFirestoreProfilesCount}`);
 
-    } else {
-      console.log(`[SeedBase] ${studentsCollectionName} already populated or 'force' is false. Skipping.`);
+      const userCredential = await createUserWithEmailAndPassword(auth, studentData.email, studentData.password);
+      const uid = userCredential.user.uid;
+      
+      // Map the temporary username from dummyData to the real Firebase UID.
+      // This is crucial for linking studentEvents correctly in Step 3.
+      usernameToUidMap.set(studentData.username, uid);
+
+      // --- FIX: This is the corrected logic for creating the student profile object ---
+      // 1. Destructure the password to exclude it from the profile.
+      // 2. Alias the 'id' from dummyData to 'studentIdCardFromDummy' to avoid confusion.
+      const { password, id: studentIdCardFromDummy, ...profileData } = studentData;
+      
+      // 3. Construct the final, clean Firestore profile document.
+      const firestoreProfile = {
+        ...profileData, // Includes firstName, lastName, email, username, courseCodes
+        uid: uid,                           // The official Firebase Auth UID.
+        id: uid,                            // The document's primary key, consistent with UID.
+        studentIdCard: studentIdCardFromDummy, // The 9-digit national ID.
+        createdAt: new Date().toISOString(),
+      };
+      
+      // The document ID in the 'students' collection is the Firebase UID.
+      await setDoc(doc(db, "students", uid), firestoreProfile);
+      
+      console.log(`Successfully created user: ${studentData.username} (UID: ${uid})`);
+    } catch (error) {
+      if (error.code === 'auth/email-already-in-use') {
+        console.warn(`Auth user for ${studentData.email} already exists. Skipping creation.`);
+      } else {
+        console.error(`Failed to create user ${studentData.email}:`, error);
+      }
     }
-  } catch (error) {
-    console.error(`[SeedBase] Error during student seeding process:`, error);
+    await delay(400); // Prevent hitting Firebase Auth rate limits.
   }
 
-  // --- 2. Seed Other Top-Level Collections (Years, Lecturers, Sites, etc.) ---
-  const baseEntityKeys = [
-    "years", "lecturers", "sites", "courses", "holidays",
-    "vacations", "events", "tasks", "studentEvents"
-    // coursesMeetings are handled by seedEventsData
-  ];
+  // --- Step 2: Seed all other top-level collections (non-student-specific) ---
+  console.log("Step 2: Seeding general collections (Years, Courses, etc.)...");
+  const collectionsToSeed = ["years", "lecturers", "sites", "courses", "holidays", "vacations", "events", "tasks"];
+  for (const collectionName of collectionsToSeed) {
+    const items = dummyData[collectionName] || [];
+    if (items.length === 0) continue;
 
-  for (const entityKey of baseEntityKeys) {
-    try {
-      const collectionShouldSeed = force || !(await isCollectionPopulated(entityKey));
-      if (collectionShouldSeed) {
-        if (force && (await isCollectionPopulated(entityKey))) {
-          console.warn(`[SeedBase] Force seeding ${entityKey}: existing documents with matching IDs WILL BE OVERWRITTEN.`);
-          // For a true "clean and force seed", you might delete all documents in the collection first.
-          // This requires listing all docs and then batch deleting, which adds complexity.
-          // Current `setDoc` in batch will overwrite docs with same ID.
-        }
-        console.log(`[SeedBase] Seeding collection: ${entityKey}...`);
-        const itemsToSeed = dummyData[entityKey] || [];
-        if (itemsToSeed.length === 0) {
-          console.log(`[SeedBase] No data found in dummyData for '${entityKey}'.`);
-          continue;
-        }
-        const idFieldNameInDummy = getSeedIdField(entityKey);
-
-        // Use batch write for efficiency
-        const batch = writeBatch(db);
-        let itemCountInBatch = 0;
-        itemsToSeed.forEach(item => {
-          const docId = String(item[idFieldNameInDummy]); // Ensure document ID is a string
-          if (!docId) {
-            console.warn(`[SeedBase] Skipping item in '${entityKey}' (missing ID field '${idFieldNameInDummy}'):`, item);
-            return; // Skip if no ID can be determined for the document
-          }
-          const docRef = doc(db, entityKey, docId);
-          batch.set(docRef, item); // set() will create or overwrite the document
-          itemCountInBatch++;
-        });
-
-        if (itemCountInBatch > 0) {
-          await batch.commit();
-          console.log(`[SeedBase] Successfully committed ${itemCountInBatch} items for '${entityKey}'.`);
-        } else {
-          console.log(`[SeedBase] No valid items with IDs found to seed for '${entityKey}'.`);
-        }
+    const batch = writeBatch(db);
+    items.forEach(item => {
+      // Determine the document ID from the object's various possible key names.
+      const docId = item.id || item.yearCode || item.siteCode || item.courseCode || item.holidayCode || item.vacationCode || item.eventCode || item.assignmentCode;
+      if (docId) {
+        batch.set(doc(db, collectionName, String(docId)), item);
       } else {
-        console.log(`[SeedBase] Collection '${entityKey}' already populated or 'force' is false. Skipping.`);
+        console.warn(`Skipping item in ${collectionName} due to missing ID:`, item);
       }
-    } catch (error) {
-      // Catch errors from isCollectionPopulated, batch commit, etc. for this specific entityKey
-      console.error(`[SeedBase] Error processing or seeding '${entityKey}':`, error);
-    }
-  } // End loop for baseEntityKeys
+    });
+    await batch.commit();
+    console.log(`  > Seeded ${items.length} items to '${collectionName}'.`);
+  }
 
-  console.log("[SeedBase] Full base data seeding process has finished.");
+  // --- Step 3: Seed studentEvents, replacing temporary usernames with real UIDs ---
+  console.log("Step 3: Seeding studentEvents with correct UIDs...");
+  const studentEventsBatch = writeBatch(db);
+  const studentEventsToSeed = dummyData.studentEvents || [];
+  let seededEventsCount = 0;
+  
+  studentEventsToSeed.forEach(event => {
+    // Find the real Firebase UID from the map we created in Step 1.
+    const uid = usernameToUidMap.get(event.studentId);
+    if (uid) {
+      // Create the final event object with the real UID.
+      const finalEvent = { ...event, studentId: uid };
+      studentEventsBatch.set(doc(db, "studentEvents", finalEvent.eventCode), finalEvent);
+      seededEventsCount++;
+    } else {
+      console.warn(`Could not find UID for username '${event.studentId}'. Skipping event:`, event);
+    }
+  });
+
+  if (seededEventsCount > 0) {
+    await studentEventsBatch.commit();
+  }
+  console.log(`  > Seeded ${seededEventsCount} items to 'studentEvents'.`);
+
+  console.log("[SeedBase] ✅ Full seed process finished successfully.");
 };

@@ -398,19 +398,23 @@ export const validatePersonalEventForm = async (formData, options = {}) => {
       } catch (e) { console.error("Student event code check failed:", e); errors.eventCode = "Could not verify code uniqueness."; }
   }
 
-  // Synchronous checks remain
   if (!formData.eventName?.trim()) errors.eventName = "Event name is required.";
   if (!formData.startDate?.trim()) errors.startDate = "Date is required.";
+  
   const isAllDayBool = formData.allDay === true || String(formData.allDay).toLowerCase() === 'true';
+
   if (!isAllDayBool) {
-      if (!startHour?.trim()) errors.startHour = "Start time is required."; // Variable 'startHour' might not be defined here, use formData.startHour
-      if (!formData.startHour?.trim()) errors.startHour = "Start time is required.";
-      if (!formData.endHour?.trim()) errors.endHour = "End time is required.";
+      // --- FIX: Use formData.startHour and formData.endHour consistently ---
+      if (!formData.startHour?.trim()) {
+          errors.startHour = "Start time is required.";
+      }
+      if (!formData.endHour?.trim()) {
+          errors.endHour = "End time is required.";
+      }
       if (formData.startHour && formData.endHour && formData.startHour >= formData.endHour) {
           errors.endHour = "End time must be after start time.";
       }
   }
-  // Overlap check is complex with Firestore, usually handled server-side or skipped client-side.
   return errors;
 };
 

@@ -1,69 +1,63 @@
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
-import { getAllVisibleEvents } from '../utils/getAllVisibleEvents'; // Use the async Firestore function
-import { useAuth } from './AuthContext'; // Use the Firebase-based AuthContext
+// src/context/EventsContext.jsx
+
+import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
+import { useAuth } from './AuthContext';
+// --- FIX: NO LONGER NEEDED ---
+// import { formatAllEventsForCalendar } from '../utils/eventFormatters'; 
+import { getAllVisibleEvents } from '../utils/getAllVisibleEvents';
 
 const EventsContext = createContext(null);
 
 export const EventsProvider = ({ children }) => {
   const { currentUser, isLoading: isLoadingAuth } = useAuth();
-  const [studentEvents, setStudentEvents] = useState([]);
+
+  const [allVisibleEvents, setAllVisibleEvents] = useState([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
-  const [eventsError, setEventsError] = useState(null);
+  const [error, setError] = useState(null);
 
   const fetchEvents = useCallback(async () => {
-    if (isLoadingAuth) {
-        console.log("[EventsContext] Skipping fetch: Auth still loading.");
-        setIsLoadingEvents(true); // Keep showing loading indicator for events
-        return;
-    }
-    // Fetch only if currentUser has a UID (indicating logged in)
-    if (!currentUser?.uid) {
-        console.log("[EventsContext] No user UID found, clearing events.");
-        setStudentEvents([]);
-        setIsLoadingEvents(false);
-        setEventsError(null);
-        return;
-    }
+    if (isLoadingAuth) return;
 
-    console.log(`[EventsContext] Fetching events from Firestore for user UID: ${currentUser.uid}`);
+    // --- FIX: The logic now includes a "guest" view ---
+    // We can fetch events even if no user is logged in (they will just see public events).
+    console.log(`[EventsContext] Fetching all visible events for user: ${currentUser?.uid || 'Guest'}`);
     setIsLoadingEvents(true);
-    setEventsError(null);
+    setError(null);
 
     try {
-        // Pass the entire currentUser object, getAllVisibleEvents might need more than just UID
-        const fetchedEvents = await getAllVisibleEvents(currentUser);
-        console.log(`[EventsContext] Fetched ${fetchedEvents.length} events.`);
-        setStudentEvents(fetchedEvents);
-    } catch (error) {
-        console.error("[EventsContext] Error fetching student events:", error);
-        setStudentEvents([]);
-        setEventsError(error);
-    } finally {
-        setIsLoadingEvents(false);
-    }
-  }, [currentUser, isLoadingAuth]); // Dependencies: run if user or auth loading state changes
+      // --- FIX: Simplified logic. getAllVisibleEvents now does everything. ---
+      // It fetches, enriches, and formats the data.
+      const formattedEvents = await getAllVisibleEvents(currentUser);
+      console.log(`[EventsContext] Received ${formattedEvents.length} final, formatted events.`);
+      setAllVisibleEvents(formattedEvents);
 
+    } catch (err) {
+      console.error("[EventsContext] Critical error fetching events:", err);
+      setAllVisibleEvents([]);
+      setError(err.message || 'An unknown error occurred.');
+    } finally {
+      setIsLoadingEvents(false);
+    }
+  }, [currentUser, isLoadingAuth]);
 
   useEffect(() => {
-    // Trigger fetch only when auth is done loading
+    // This effect runs once auth is settled, and re-runs if the user logs in/out.
     if (!isLoadingAuth) {
-      fetchEvents();
+        fetchEvents();
     }
-  }, [fetchEvents, isLoadingAuth]); // Depend on fetchEvents identity and auth loading state
+  }, [fetchEvents, isLoadingAuth]);
 
-
-  const refreshStudentEvents = useCallback(() => {
-      console.log("[EventsContext] Manual refresh triggered.");
-      fetchEvents(); // Call the async fetch function
+  const refreshEvents = useCallback(() => {
+    console.log("[EventsContext] Manual refresh triggered.");
+    fetchEvents();
   }, [fetchEvents]);
 
-
-  const value = {
-    studentEvents,
+  const value = useMemo(() => ({
+    allVisibleEvents,
     isLoadingEvents,
-    refreshStudentEvents,
-    error: eventsError,
-  };
+    refreshEvents,
+    error,
+  }), [allVisibleEvents, isLoadingEvents, refreshEvents, error]);
 
   return (
     <EventsContext.Provider value={value}>

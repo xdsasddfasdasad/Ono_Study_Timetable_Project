@@ -1,8 +1,8 @@
-// /components/modals/forms/StudentPersonalEventFormModal.jsx
+// src/components/modals/forms/StudentPersonalEventFormModal.jsx
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  TextField, Stack, Button, FormControlLabel, Checkbox, Alert, Box, 
+  TextField, Stack, Button, FormControlLabel, Checkbox, Alert, Box,
   DialogActions, DialogContent,
 } from "@mui/material";
 import PopupModal from "../../UI/PopupModal";
@@ -17,70 +17,64 @@ const StudentPersonalEventFormModal = ({
   errorMessage,
   validationErrors,
 }) => {
+  // State uses Firestore-compatible field names
   const [formData, setFormData] = useState({
     eventCode: '',
     eventName: '',
     notes: '',
-    date: '',
+    startDate: '',
     allDay: false,
-    startTime: '09:00',
-    endTime: '10:00',
+    startHour: '09:00',
+    endHour: '10:00',
   });
+
   useEffect(() => {
     if (open) {
-      if (initialData) {
-        console.log("Populating modal for EDIT:", initialData);
+      if (initialData) { // For editing
         setFormData({
-          eventCode: initialData.eventCode || initialData.id || '',
+          eventCode: initialData.eventCode || '',
           eventName: initialData.eventName || '',
           notes: initialData.notes || '',
-          date: initialData.startDate || '',
+          startDate: initialData.startDate || '',
           allDay: initialData.allDay || false,
-          startTime: initialData.allDay ? '' : (initialData.startHour || '09:00'),
-          endTime: initialData.allDay ? '' : (initialData.endHour || '10:00'),
+          startHour: initialData.allDay ? '' : (initialData.startHour || '09:00'),
+          endHour: initialData.allDay ? '' : (initialData.endHour || '10:00'),
         });
-      } else {
-        console.log("Populating modal for ADD with default date:", defaultDate);
+      } else { // For adding
         setFormData({
           eventCode: '',
           eventName: '',
           notes: '',
-          date: defaultDate || new Date().toISOString().split('T')[0],
+          startDate: defaultDate || new Date().toISOString().split('T')[0],
           allDay: false,
-          startTime: '09:00',
-          endTime: '10:00',
+          startHour: '09:00',
+          endHour: '10:00',
         });
       }
     }
   }, [open, initialData, defaultDate]);
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     const val = type === 'checkbox' ? checked : value;
     setFormData((prev) => ({
       ...prev,
       [name]: val,
-      ...(name === 'allDay' && val === true && { startTime: '', endTime: '' }),
+      ...(name === 'allDay' && val === true && { startHour: '', endHour: '' }),
     }));
   };
+
   const handleSubmit = (e) => {
-    e.preventDefault(); 
-    console.log("Modal handleSubmit triggered");
-    if (onSave) {
-      onSave(formData);
-    } else {
-        console.error("onSave prop is missing from StudentPersonalEventFormModal");
-    }
+    e.preventDefault();
+    if (onSave) onSave(formData);
   };
+
   const handleDeleteClick = () => {
-    console.log("Modal handleDelete triggered");
-    if (onDelete && formData.eventCode) {
-      onDelete(formData.eventCode);
-    } else {
-       console.error("onDelete prop or eventCode is missing");
-    }
+    if (onDelete && formData.eventCode) onDelete(formData.eventCode);
   };
 
   const getFieldError = (fieldName) => validationErrors?.[fieldName];
+
   return (
     <PopupModal
       open={open}
@@ -88,94 +82,26 @@ const StudentPersonalEventFormModal = ({
       title={initialData?.eventCode ? "Edit Personal Event" : "Add Personal Event"}
     >
       <form onSubmit={handleSubmit}>
-        <DialogContent> 
+        <DialogContent>
             {errorMessage && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage}</Alert>}
-            <Stack spacing={2}>
-            <TextField
-                label="Event Name"
-                name="eventName"
-                value={formData.eventName}
-                onChange={handleChange}
-                error={!!getFieldError('eventName')}
-                helperText={getFieldError('eventName') || ' '}
-                fullWidth
-                required
-                autoFocus
-            />
-            <TextField
-                label="Date"
-                name="date"
-                type="date"
-                value={formData.date}
-                onChange={handleChange}
-                error={!!getFieldError('date')}
-                helperText={getFieldError('date') || ' '}
-                fullWidth
-                required
-                InputLabelProps={{ shrink: true }}
-            />
-             <FormControlLabel
-                control={
-                    <Checkbox
-                        checked={formData.allDay}
-                        onChange={handleChange}
-                        name="allDay"
-                    />
-                }
-                label="All Day Event"
-            />
-            {!formData.allDay && (
-                <Stack direction="row" spacing={2}>
-                    <TextField
-                        label="Start Time"
-                        name="startTime"
-                        type="time"
-                        value={formData.startTime}
-                        onChange={handleChange}
-                        error={!!getFieldError('startTime')}
-                        helperText={getFieldError('startTime') || ' '}
-                        fullWidth
-                        required={!formData.allDay}
-                        InputLabelProps={{ shrink: true }}
-                    />
-                    <TextField
-                        label="End Time"
-                        name="endTime"
-                        type="time"
-                        value={formData.endTime}
-                        onChange={handleChange}
-                        error={!!getFieldError('endTime')}
-                        helperText={getFieldError('endTime') || ' '}
-                        fullWidth
-                        required={!formData.allDay}
-                        InputLabelProps={{ shrink: true }}
-                    />
-                </Stack>
-            )}
-            <TextField
-                label="Notes"
-                name="notes"
-                value={formData.notes}
-                onChange={handleChange}
-                multiline
-                rows={3}
-                fullWidth
-
-                helperText={' '}
-            />
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <TextField name="eventName" label="Event Name" value={formData.eventName} onChange={handleChange} error={!!getFieldError('eventName')} helperText={getFieldError('eventName') || ' '} fullWidth required autoFocus />
+              <TextField name="startDate" label="Date" type="date" value={formData.startDate} onChange={handleChange} error={!!getFieldError('startDate')} helperText={getFieldError('startDate') || ' '} fullWidth required InputLabelProps={{ shrink: true }} />
+              <FormControlLabel control={<Checkbox checked={formData.allDay} onChange={handleChange} name="allDay" />} label="All Day Event" />
+              {!formData.allDay && (
+                  <Stack direction="row" spacing={2}>
+                      <TextField name="startHour" label="Start Time" type="time" value={formData.startHour} onChange={handleChange} error={!!getFieldError('startHour')} helperText={getFieldError('startHour') || ' '} fullWidth required={!formData.allDay} InputLabelProps={{ shrink: true }} />
+                      <TextField name="endHour" label="End Time" type="time" value={formData.endHour} onChange={handleChange} error={!!getFieldError('endHour')} helperText={getFieldError('endHour') || ' '} fullWidth required={!formData.allDay} InputLabelProps={{ shrink: true }} />
+                  </Stack>
+              )}
+              <TextField name="notes" label="Notes" value={formData.notes} onChange={handleChange} multiline rows={3} fullWidth helperText={' '} />
             </Stack>
         </DialogContent>
         <DialogActions sx={{ padding: '16px 24px' }}>
-            {initialData?.eventCode && (
-                <Button color="error" onClick={handleDeleteClick} variant="outlined">
-                Delete
-                </Button>
-            )}
+            {initialData?.eventCode && (<Button color="error" onClick={handleDeleteClick} variant="outlined">Delete</Button>)}
             <Box sx={{ flexGrow: 1 }} />
             <Button onClick={onClose} variant="text">Cancel</Button>
-            <Button type="submit" variant="contained">
-                {initialData?.eventCode ? "Update Event" : "Save Event"}
-            </Button>
+            <Button type="submit" variant="contained">{initialData?.eventCode ? "Update Event" : "Save Event"}</Button>
         </DialogActions>
       </form>
     </PopupModal>

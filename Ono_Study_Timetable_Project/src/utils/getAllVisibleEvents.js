@@ -1,126 +1,176 @@
-import { getRecords } from './storage'; // Keep temporarily if getLecturersMap isn't updated yet
-import { formatDateTime, getExclusiveEndDate } from './eventFormatters';
-import { fetchCollection, fetchDocumentsByQuery } from '../firebase/firestoreService'; // Import Firestore functions
+// src/utils/getAllVisibleEvents.js
 
-// --- Helper Functions & Constants ---
+import { fetchCollection } from '../firebase/firestoreService';
+import { addDays, parseISO, format } from 'date-fns';
 
-// Cache for lecturers map (remains the same logic, but data source changes)
 let lecturersMapCache = null;
 const getLecturersMap = async () => {
-    // Return cache if available
     if (lecturersMapCache) return lecturersMapCache;
-    console.log("[getAllVisibleEvents:getLecturersMap] Creating lecturers map from Firestore...");
     try {
-        // ✅ Fetch lecturers from Firestore
         const lecturers = await fetchCollection("lecturers");
         lecturersMapCache = new Map(lecturers.map(l => [l.id, l.name]));
         return lecturersMapCache;
     } catch (error) {
-         console.error("[getAllVisibleEvents:getLecturersMap] Error fetching lecturers:", error);
-         lecturersMapCache = new Map(); // Return empty map on error
-         return lecturersMapCache;
+         console.error("Error fetching lecturers:", error);
+         return new Map();
     }
 };
 
-// Color definitions (ideally move to a central config/theme file)
-const EVENT_COLORS = { courseMeeting: '#42a5f5', event: '#ab47bc', holiday: '#ef9a9a', vacation: '#fff59d', task: '#ffa726', yearMarker: '#a5d6a7', semesterMarker: '#81d4fa', studentEvent: '#4db6ac', default: '#bdbdbd' };
-const EVENT_BORDERS = { courseMeeting: '#1e88e5', event: '#8e24aa', holiday: '#e57373', vacation: '#ffee58', task: '#fb8c00', yearMarker: '#66bb6a', semesterMarker: '#29b6f6', studentEvent: '#26a69a', default: '#9e9e9e' };
-const EVENT_TEXT_COLORS = { courseMeeting: '#000000', event: '#ffffff', holiday: '#b71c1c', vacation: '#5d4037', task: '#000000', yearMarker: '#1b5e20', semesterMarker: '#01579b', studentEvent: '#ffffff', default: '#000000' };
+const getExclusiveEndDate = (endDateString) => {
+    if (!endDateString) return null;
+    try {
+        return format(addDays(parseISO(endDateString), 1), 'yyyy-MM-dd');
+    } catch { return null; }
+};
 
-/**
- * Fetches and formats all events relevant to the user (public + personal) from Firestore.
- * @param {object | null} currentUser - The currently logged-in user object (from Firebase Auth + Firestore profile), needed for personal events. Should contain at least a 'uid' or 'id'.
- * @returns {Promise<Array<object>>} A promise resolving to an array of FullCalendar event objects.
- */
+const EVENT_ICONS = {
+  courseMeeting: '📚', holiday: '🎉', vacation: '🏖️',
+  event: '🗓️', task: '📌', studentEvent: '👤',
+  yearMarker: '🏁', semesterMarker: '🚩'
+};
+
 export const getAllVisibleEvents = async (currentUser = null) => {
-  const currentUserId = currentUser?.id || currentUser?.uid; // Use 'id' if available from merged profile, else 'uid'
-  console.log(`[getAllVisibleEvents] Fetching ALL events from Firestore (personal for ${currentUserId || 'guest'})`);
+  // Use Firebase UID as the single source of truth for filtering
+  const userUID = currentUser?.uid;
+  console.log(`[getAllVisibleEvents] Fetching all events. Personal events for UID: ${userUID || 'Guest'}`);
 
   try {
-    // --- 1. Fetch all necessary data collections in parallel ---
-    console.log("[getAllVisibleEvents] Starting parallel data fetch...");
+    // Restore the full Promise.all call to fetch all data sources correctly
     const [
-        rawMeetings,
-        rawGeneralEvents,
-        rawHolidays,
-        rawVacations,
-        rawTasks,
-        allRawStudentEvents, // Fetch all, filter later
-        years,
-        currentLecturersMap // Fetch lecturers map
+      rawMeetings, rawGeneralEvents, rawHolidays, rawVacations, rawTasks,
+      allRawStudentEvents, years, lecturersMap,
     ] = await Promise.all([
-        fetchCollection("coursesMeetings"),
-        fetchCollection("events"),
-        fetchCollection("holidays"),
-        fetchCollection("vacations"),
-        fetchCollection("tasks"),
-        fetchCollection("studentEvents"), // Fetch all personal events
-        fetchCollection("years"),
-        getLecturersMap() // Fetch lecturers map (now async)
+      fetchCollection("coursesMeetings"), fetchCollection("events"),
+      fetchCollection("holidays"), fetchCollection("vacations"),
+      fetchCollection("tasks"), fetchCollection("studentEvents"),
+      fetchCollection("years"), getLecturersMap(),
     ]);
-    console.log("[getAllVisibleEvents] Parallel data fetch complete.");
 
-    // --- 2. Prepare the combined events array ---
-    const combinedEvents = [];
+    const allEvents = [];
+    const addEvent = (event) => {
+      // Ensure the event has a type in its extendedProps for filtering/display logic later
+      if (!event.extendedProps || !event.extendedProps.type) {
+          console.warn("Event is missing type in extendedProps", event);
+          return;
+      }
+      allEvents.push(event);
+    };
 
-    // 3. Format Course Meetings
-    try {
-        const formattedMeetings = rawMeetings.map(m => { /* ... formatting logic as before ... */ }).filter(Boolean);
-        combinedEvents.push(...formattedMeetings);
-    } catch (err) { console.error("Error formatting meetings:", err); }
+    // Course Meetings
+    (rawMeetings || []).forEach(m => {
+      if (!m.date || !m.startHour) return;
+      addEvent({
+        id: m.id,
+        title: `${EVENT_ICONS.courseMeeting} ${m.courseName}`,
+        start: `${m.date}T${m.startHour}`,
+        end: m.endHour ? `${m.date}T${m.endHour}` : undefined,
+        allDay: false,
+        extendedProps: { ...m, type: 'courseMeeting', lecturerName: lecturersMap.get(m.lecturerId) }
+      });
+    });
 
-    // 4. Format General Events
-    try {
-        const formattedGeneralEvents = rawGeneralEvents.map(e => { /* ... formatting logic as before ... */ }).filter(Boolean);
-        combinedEvents.push(...formattedGeneralEvents);
-    } catch (err) { console.error("Error formatting general events:", err); }
+    // General Events
+    (rawGeneralEvents || []).forEach(e => {
+      if (!e.startDate) return;
+      addEvent({
+        id: e.eventCode,
+        title: `${EVENT_ICONS.event} ${e.eventName}`,
+        start: e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`,
+        end: e.allDay ? getExclusiveEndDate(e.endDate) : (e.endHour ? `${e.endDate || e.startDate}T${e.endHour}` : undefined),
+        allDay: e.allDay,
+        extendedProps: { ...e, type: 'event' }
+      });
+    });
 
-    // 5. Format Holidays
-    try {
-        const formattedHolidays = rawHolidays.map(h => { /* ... formatting logic as before ... */ }).filter(Boolean);
-        combinedEvents.push(...formattedHolidays);
-    } catch (err) { console.error("Error formatting holidays:", err); }
+    // Holidays (Background)
+    (rawHolidays || []).forEach(h => {
+      if (!h.startDate) return;
+      addEvent({
+        id: h.holidayCode,
+        title: `${EVENT_ICONS.holiday} ${h.holidayName}`,
+        start: h.startDate,
+        end: getExclusiveEndDate(h.endDate),
+        allDay: true,
+        display: 'background',
+        extendedProps: { ...h, type: 'holiday' }
+      });
+    });
 
-    // 6. Format Vacations
-     try {
-        const formattedVacations = rawVacations.map(v => { /* ... formatting logic as before ... */ }).filter(Boolean);
-        combinedEvents.push(...formattedVacations);
-    } catch (err) { console.error("Error formatting vacations:", err); }
+    // Vacations (Background)
+    (rawVacations || []).forEach(v => {
+      if (!v.startDate) return;
+      addEvent({
+        id: v.vacationCode,
+        title: `${EVENT_ICONS.vacation} ${v.vacationName}`,
+        start: v.startDate,
+        end: getExclusiveEndDate(v.endDate),
+        allDay: true,
+        display: 'background',
+        extendedProps: { ...v, type: 'vacation' }
+      });
+    });
 
-    // 7. Format Tasks
-    try {
-        const formattedTasks = rawTasks.map(t => { /* ... formatting logic as before ... */ }).filter(Boolean);
-        combinedEvents.push(...formattedTasks);
-    } catch (err) { console.error("Error formatting tasks:", err); }
+    // Tasks
+    (rawTasks || []).forEach(t => {
+      if (!t.submissionDate) return;
+      addEvent({
+        id: t.assignmentCode,
+        title: `${EVENT_ICONS.task} Due: ${t.assignmentName}`,
+        start: `${t.submissionDate}T${t.submissionHour || '23:59'}`,
+        allDay: false,
+        extendedProps: { ...t, type: 'task' }
+      });
+    });
 
-    // 8. Format Personal Events (Filter for current user)
-    if (currentUserId) {
-         try {
-            // Filter the fetched student events for the current user
-            const myRawStudentEvents = allRawStudentEvents.filter(event => event?.studentId === currentUserId);
-            const formattedPersonalEvents = myRawStudentEvents.map(e => { /* ... formatting logic as before ... */ }).filter(Boolean);
-            combinedEvents.push(...formattedPersonalEvents);
-             console.log(`[getAllVisibleEvents] Added ${formattedPersonalEvents.length} personal events for ${currentUserId}.`);
-        } catch (err) { console.error("Error formatting personal events:", err); }
+    // Personal Student Events (Filter by UID)
+    if (userUID) {
+      (allRawStudentEvents || [])
+        .filter(event => event.studentId === userUID)
+        .forEach(e => {
+          if (!e.startDate) return;
+          addEvent({
+            id: e.eventCode,
+            title: `${EVENT_ICONS.studentEvent} ${e.eventName}`,
+            start: e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`,
+            end: e.allDay ? getExclusiveEndDate(e.endDate) : (e.endHour ? `${e.endDate || e.startDate}T${e.endHour}` : undefined),
+            allDay: e.allDay,
+            extendedProps: { ...e, type: 'studentEvent' }
+          });
+        });
     }
 
-    // 9. Format Year/Semester Markers (Block Display)
-     try {
-        const markerEvents = years.flatMap((year) => { /* ... formatting logic as before (using block display) ... */ }).filter(Boolean);
-        combinedEvents.push(...markerEvents);
-    } catch (err) { console.error("Error formatting markers:", err); }
+    // Year & Semester Markers (Block Display)
+    (years || []).forEach(year => {
+      if (year.startDate) {
+        addEvent({
+          id: `y-start-${year.yearCode}`,
+          title: `${EVENT_ICONS.yearMarker} Year ${year.yearNumber} Starts`,
+          start: year.startDate,
+          allDay: true,
+          display: 'block',
+          extendedProps: { ...year, type: 'yearMarker' }
+        });
+      }
+      (year.semesters || []).forEach(semester => {
+        if (semester.startDate) {
+          addEvent({
+            id: `s-start-${semester.semesterCode}`,
+            title: `${EVENT_ICONS.semesterMarker} Sem. ${semester.semesterNumber} (${year.yearNumber}) Starts`,
+            start: semester.startDate,
+            allDay: true,
+            display: 'block',
+            extendedProps: { ...semester, type: 'semesterMarker', yearCode: year.yearCode }
+          });
+        }
+      });
+    });
 
-    // --- 10. Return the final combined array ---
-    console.log(`[getAllVisibleEvents] Returning ${combinedEvents.length} total formatted events.`);
-    return combinedEvents;
-
-  } catch (error) {
-    // Catch errors from Promise.all or other general processing
-    console.error("[getAllVisibleEvents] Overall error fetching or processing data:", error);
-    return []; // Return empty array on failure
+    console.log(`[getAllVisibleEvents] Returning ${allEvents.length} total events.`);
+    return allEvents;
+  
+  } catch(error) {
+    console.error("[getAllVisibleEvents] A critical error occurred during data fetching or processing:", error);
+    // In case of a failure in Promise.all or elsewhere, return an empty array to prevent app crash
+    return [];
   }
 };
-
-// Note: The original getStudentEvents function might become redundant or could be
-// simplified to just call getAllVisibleEvents(currentUser) if the only difference
-// was filtering personal events.

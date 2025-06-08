@@ -1,22 +1,19 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+// src/components/modals/TimeTableAddModal.jsx
+
+import React, { useState, useEffect, useCallback } from "react";
 import {
-  Stack, MenuItem, Select, InputLabel, FormControl, Alert, Box, CircularProgress, Typography
+  Stack, MenuItem, Select, InputLabel, FormControl, Alert, Box, CircularProgress, Typography, Button
 } from "@mui/material";
 import PopupModal from "../UI/PopupModal";
-import CustomButton from "../UI/CustomButton";
-import {
-    recordTypeLabels as allRecordTypeLabels,
-    getEntityKeyByRecordType,
-    generateInitialFormData
-} from "../../utils/formMappings";
-import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers"; // Will be async
-import { fetchCollection, fetchDocumentById } from "../../firebase/firestoreService"; // Firestore service
+import { formMappings } from "../../utils/formMappings";
+import { handleSaveOrUpdateRecord } from "../../handlers/formHandlers";
+import { fetchCollection } from "../../firebase/firestoreService";
 
-// Import ALL possible form components (ensure paths are correct)
+// Import all possible form components dynamically
 import YearForm from "./forms/YearForm";
 import SemesterForm from "./forms/SemesterForm";
 import LecturerForm from "./forms/LecturerForm";
-import CourseMeetingForm from "./forms/CourseMeetingForm"; // (Formerly SpesificCourseFormEdit)
+import CourseMeetingForm from "./forms/CourseMeetingForm";
 import TaskForm from "./forms/TaskForm";
 import SiteForm from "./forms/SiteForm";
 import RoomForm from "./forms/RoomForm";
@@ -24,262 +21,146 @@ import HolidayForm from "./forms/HolidayForm";
 import VacationForm from "./forms/VacationForm";
 import EventForm from "./forms/EventForm";
 
-// Map recordType to the actual Form Component
-// Excludes 'course' as its definition is handled by a dedicated modal
 const formComponentMap = {
   year: YearForm, semester: SemesterForm, lecturer: LecturerForm,
   courseMeeting: CourseMeetingForm, task: TaskForm, site: SiteForm,
   room: RoomForm, holiday: HolidayForm, vacation: VacationForm, event: EventForm,
 };
 
-// Filter labels to only include types that can be added via this modal
-const addableRecordTypeLabels = Object.entries(allRecordTypeLabels)
+const addableRecordTypes = Object.entries(formMappings)
     .filter(([key]) => key in formComponentMap)
-    .reduce((acc, [key, label]) => { acc[key] = label; return acc; }, {});
+    .map(([key, value]) => ({ key, label: value.label }))
+    .sort((a, b) => a.label.localeCompare(b.label)); // Sort alphabetically for user convenience
 
-// Helper to load data for form dropdowns asynchronously from Firestore
+// This helper is used by both Add and Edit modals
 const loadSelectOptionsAsync = async () => {
-    console.log("[AddModal:LoadOptions] Loading select options from Firestore...");
     try {
-        // Fetch all necessary data lists in parallel
-        const [yearsData, sitesData, lecturersData, coursesData] = await Promise.all([
-            fetchCollection("years"),
-            fetchCollection("sites"),
-            fetchCollection("lecturers"),
-            fetchCollection("courses") // Needed for 'TaskForm' or 'CourseMeetingForm'
+        const [years, sites, lecturers, courses] = await Promise.all([
+            fetchCollection("years"), fetchCollection("sites"),
+            fetchCollection("lecturers"), fetchCollection("courses")
         ]);
-
-        const allSemesters = (yearsData || []).flatMap(y => (y.semesters || []).map(s => ({ value: s.semesterCode, label: `Sem ${s.semesterNumber} / Y${y.yearNumber} (${s.startDate} - ${s.endDate})` })));
-        const formattedRooms = (sitesData || []).flatMap(site => (site.rooms || []).map(room => ({ value: room.roomCode, label: `${room.roomName || `Room (${room.roomCode})`} @ ${site.siteName || `Site (${site.siteCode})`}` })));
-        const formattedLecturers = (lecturersData || []).map(l => ({ value: l.id, label: `${l.name} (${l.id})` }));
-        const formattedCourses = (coursesData || []).map(c => ({ value: c.courseCode, label: `${c.courseName} (${c.courseCode})` }));
-        const formattedYears = (yearsData || []).map(y => ({ value: y.yearCode, label: `Year ${y.yearNumber} (${y.yearCode})` }));
-        const formattedSites = (sitesData || []).map(s => ({ value: s.siteCode, label: `${s.siteName} (${s.siteCode})` }));
-
+        const allSemesters = (years || []).flatMap(y => (y.semesters || []).map(s => ({ value: s.semesterCode, label: `Sem ${s.semesterNumber} / Y${y.yearNumber}` })));
+        const allRooms = (sites || []).flatMap(site => (site.rooms || []).map(room => ({ value: room.roomCode, label: `${room.roomName} @ ${site.siteName}` })));
         return {
-            years: formattedYears,
-            sites: formattedSites,
-            lecturers: formattedLecturers,
-            courses: formattedCourses,
-            semesters: allSemesters,
-            rooms: formattedRooms
+            years: (years || []).map(y => ({ value: y.yearCode, label: `Year ${y.yearNumber}` })),
+            sites: (sites || []).map(s => ({ value: s.siteCode, label: s.siteName })),
+            lecturers: (lecturers || []).map(l => ({ value: l.id, label: `${l.name} (${l.id})` })),
+            courses: (courses || []).map(c => ({ value: c.courseCode, label: `${c.courseName} (${c.courseCode})` })),
+            semesters: allSemesters, rooms: allRooms,
         };
     } catch (error) {
-         console.error("[AddModal:LoadOptions] Error loading select options:", error);
+         console.error("[Modal:LoadOptions] Error:", error);
          return { years: [], sites: [], lecturers: [], courses: [], semesters: [], rooms: [] };
     }
 };
 
-// --- Main Add Modal Component ---
 export default function TimeTableAddModal({ open, onClose, onSave, defaultDate }) {
-  // --- State ---
   const [recordType, setRecordType] = useState("");
   const [formData, setFormData] = useState({});
   const [errors, setErrors] = useState({});
   const [generalError, setGeneralError] = useState("");
-  const [isLoading, setIsLoading] = useState(false); // For save operation
-  const [isLoadingOptions, setIsLoadingOptions] = useState(false); // For loading select options
-  const [selectOptions, setSelectOptions] = useState({ years: [], sites: [], lecturers: [], courses: [], semesters: [], rooms: [] });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const [selectOptions, setSelectOptions] = useState({});
 
-  // Determine which form component to render based on selected recordType
   const FormComponent = recordType ? formComponentMap[recordType] : null;
 
-  // --- Effects ---
-  // Load select options when the modal becomes visible
   useEffect(() => {
     if (open) {
-        const fetchOptions = async () => {
-            setIsLoadingOptions(true);
-            const options = await loadSelectOptionsAsync();
-            setSelectOptions(options);
-            setIsLoadingOptions(false);
-        };
-        fetchOptions();
-    }
-  }, [open]);
-
-  // Reset form state when modal opens or closes
-  useEffect(() => {
-    if (!open) {
+      setIsLoadingOptions(true);
+      loadSelectOptionsAsync().then(options => {
+        setSelectOptions(options);
+        setIsLoadingOptions(false);
+      });
+    } else {
       setRecordType(""); setFormData({}); setErrors({}); setGeneralError(""); setIsLoading(false);
-    } else {
-      // Reset for a new entry when modal opens (recordType is cleared first)
-      setRecordType(""); setFormData({}); setErrors({}); setGeneralError("");
     }
   }, [open]);
 
-  // Generate initial form data structure when a recordType is selected
-   useEffect(() => {
-        if (recordType && open) { // Only if a type is chosen and modal is open
-            const initialData = generateInitialFormData(recordType, defaultDate);
-            setFormData(initialData);
-            setErrors({}); setGeneralError(""); // Clear errors for the new form type
-        } else if (!recordType && open) { // If type is de-selected while modal is open
-             setFormData({}); // Clear form data
-        }
-    }, [recordType, defaultDate, open]);
-
-
-  // --- Handlers ---
-  // Update the selected recordType state
-  const handleRecordTypeChange = useCallback((event) => {
-    setRecordType(event.target.value);
-  }, []);
-
-  // Handle changes from any field within the dynamically rendered form
-  const handleFormChange = useCallback((eventOrData) => {
-    setGeneralError(""); // Clear general error on any form change
-    let name, value;
-
-    if (eventOrData.target && typeof eventOrData.target === 'object' && typeof eventOrData.target.name === 'string') {
-        name = eventOrData.target.name;
-        value = eventOrData.target.type === 'checkbox' ? eventOrData.target.checked : eventOrData.target.value;
-    } else if (typeof eventOrData === 'object' && eventOrData !== null && eventOrData.name === 'hours' && Array.isArray(eventOrData.value)) {
-        name = 'hours'; value = eventOrData.value; // For CourseForm hours array
+  useEffect(() => {
+    if (recordType && open) {
+      const defaultValues = defaultDate ? { startDate: defaultDate } : {};
+      const initialData = formMappings[recordType]?.initialData(defaultValues);
+      setFormData(initialData || {});
+      setErrors({}); setGeneralError("");
     } else {
-        console.warn("[AddModal:FormChange] Unhandled data format:", eventOrData);
-        return;
+      setFormData({});
     }
-
-    setFormData((prev) => {
-         const updatedData = { ...prev, [name]: value };
-         // Specific logic for 'allDay' checkbox in EventForm
-         if (name === 'allDay' && value === true) {
-             updatedData.startHour = ''; updatedData.endHour = '';
-         }
-        return updatedData;
-    });
-
-    // Clear specific field error
-    if (errors[name]) { setErrors((prev) => { const newE = {...prev}; delete newE[name]; return newE; });}
-    // Clear hours array related errors if 'hours' changed
-    if (name === 'hours') {
-        setErrors((prev) => {
-            const newE = {...prev};
-            if(newE.hours) delete newE.hours;
-            Object.keys(newE).forEach(k => {if(k.startsWith('hours[')) delete newE[k];});
-            return newE;
-        });
-    }
+  }, [recordType, defaultDate, open]);
+  
+  const handleFormChange = useCallback((eventOrData) => {
+    const { name, value } = eventOrData.target 
+      ? { name: eventOrData.target.name, value: eventOrData.target.type === 'checkbox' ? eventOrData.target.checked : eventOrData.target.value }
+      : { name: eventOrData.name, value: eventOrData.value };
+    
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors(prev => { const newErrors = {...prev}; delete newErrors[name]; return newErrors; });
   }, [errors]);
 
-
-  // Handle the "Save Record" button click
   const handleSaveClick = useCallback(async () => {
-    if (!recordType || !FormComponent) {
-      setGeneralError("Please select a record type first."); return;
-    }
+    if (!recordType) return;
     setIsLoading(true); setErrors({}); setGeneralError("");
 
-    const entityKey = getEntityKeyByRecordType(recordType);
-    if (!entityKey) {
-        setIsLoading(false); setGeneralError(`Configuration error: No entity key for type '${recordType}'.`); return;
+    const mapping = formMappings[recordType];
+    if (!mapping) {
+      setIsLoading(false);
+      setGeneralError("Configuration error: Cannot find mapping for this record type.");
+      return;
     }
 
-    let dataToSave = { ...formData };
-    // Prepare validationExtra for the handler.
-    // The handler will use this to fetch necessary context for its validation pass.
-    let validationExtra = {
-        recordType: recordType, // Pass the logical record type
-        editingId: null,        // Always null for 'add' mode
-        options: {}             // Can pass any form-specific options for validation
-    };
-
-    // For nested types, if validation function needs the parent record's data,
-    // fetch it here and pass it. Handler will also fetch parent for actual save.
-    try {
-        if (recordType === 'semester' && dataToSave.yearCode) {
-            validationExtra.parentRecord = await fetchDocumentById('years', dataToSave.yearCode);
-            if (!validationExtra.parentRecord) throw new Error(`Parent year ${dataToSave.yearCode} not found.`);
-        } else if (recordType === 'room' && dataToSave.siteCode) {
-            validationExtra.parentRecord = await fetchDocumentById('sites', dataToSave.siteCode);
-            if (!validationExtra.parentRecord) throw new Error(`Parent site ${dataToSave.siteCode} not found.`);
-        }
-    } catch (fetchParentError) {
-        console.error("[AddModal:Save] Error fetching parent for validation:", fetchParentError);
-        setGeneralError(`Error verifying parent: ${fetchParentError.message}`);
-        setIsLoading(false); return;
-    }
-
-    console.log(`[AddModal:Save] Saving type: ${recordType}, entityKey: ${entityKey}`);
-    // Call the handler, which will perform Firestore operations AND validation
     const result = await handleSaveOrUpdateRecord(
-        entityKey, dataToSave, "add", validationExtra, false // false: let handler validate
+        mapping.collectionName, formData, "add", { recordType }
     );
     setIsLoading(false);
 
     if (result.success) {
-      console.log("[AddModal:Save] Record saved successfully via handler.");
-      onSave?.(); // Notify parent (e.g., TimeTableManagementPage) to refresh data
-      onClose?.(); // Close this modal
+      onSave?.();
+      onClose?.();
     } else {
-      console.error("[AddModal:Save] Handler failed:", result.message, result.errors);
-      setErrors(result.errors || {}); // Display field-specific errors from handler
-      setGeneralError(result.message || "Failed to save record. Please check the details.");
+      setErrors(result.errors || {});
+      setGeneralError(result.message || "Failed to save record. Please check the form for errors.");
     }
-  }, [recordType, formData, FormComponent, onSave, onClose]); // Dependencies
+  }, [recordType, formData, onSave, onClose]);
 
-
-  // --- Render Logic ---
   return (
-    <PopupModal open={open} onClose={onClose} title={`Add New ${addableRecordTypeLabels[recordType] || 'Record'}`}>
-       <Stack spacing={3} sx={{ p: { xs: 2, sm: 3 } }}>
-            {/* Record Type Selection Dropdown */}
-            <FormControl fullWidth sx={{ mb: 2 }} disabled={isLoading || isLoadingOptions}>
-                <InputLabel id="add-record-type-label">Select Record Type</InputLabel>
-                <Select
-                    labelId="add-record-type-label"
-                    value={recordType}
-                    label="Select Record Type"
-                    onChange={handleRecordTypeChange}
-                >
-                    {Object.entries(addableRecordTypeLabels).map(([key, label]) => (
-                        <MenuItem key={key} value={key}>{label}</MenuItem>
-                    ))}
-                    {Object.keys(addableRecordTypeLabels).length === 0 && <MenuItem value="" disabled>No types to add</MenuItem>}
-                </Select>
-            </FormControl>
+    <PopupModal open={open} onClose={onClose} title={`Add New ${formMappings[recordType]?.label || 'Record'}`}>
+       <DialogContent>
+          <Stack spacing={3} sx={{ minWidth: { sm: 500 }, pt: 1 }}>
+              <FormControl fullWidth disabled={isLoading || isLoadingOptions}>
+                  <InputLabel id="add-record-type-label">Record Type</InputLabel>
+                  <Select
+                      labelId="add-record-type-label"
+                      label="Record Type"
+                      value={recordType}
+                      onChange={(e) => setRecordType(e.target.value)}
+                  >
+                      {addableRecordTypes.map(({ key, label }) => (
+                          <MenuItem key={key} value={key}>{label}</MenuItem>
+                      ))}
+                  </Select>
+              </FormControl>
 
-            {/* General Error Alert */}
-            {generalError && <Alert severity="error" sx={{ mb: 2 }}>{generalError}</Alert>}
+              {generalError && <Alert severity="error">{generalError}</Alert>}
 
-            {/* Loading Indicator for Options or Dynamic Form Area */}
-            {isLoadingOptions ? (
-                <Box sx={{display:'flex', justifyContent:'center', my: 3, alignItems: 'center'}}>
-                    <CircularProgress size={30}/>
-                    <Typography sx={{ml:1.5, color: 'text.secondary'}}>Loading form options...</Typography>
-                </Box>
-            ) : FormComponent ? (
-                <FormComponent
-                    formData={formData}
-                    errors={errors}
-                    onChange={handleFormChange}
-                    mode="add"
-                    selectOptions={selectOptions} // Pass the loaded options to the form
-                />
-            ) : (
-                recordType && <Typography sx={{ textAlign: 'center', mt: 4, color: 'text.secondary' }}>Form not available for this type.</Typography>
-            )}
-            {!recordType && !isLoadingOptions &&
-                <Typography sx={{ textAlign: 'center', mt: 4, color:'text.secondary' }}>
-                    Please select a record type to begin.
-                </Typography>
-            }
+              {isLoadingOptions && <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}><CircularProgress /></Box>}
 
-            {/* Action Buttons */}
-            <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ mt: 2 }}>
-                <CustomButton variant="outlined" onClick={onClose} disabled={isLoading || isLoadingOptions}>
-                    Cancel
-                </CustomButton>
-                <CustomButton
-                    onClick={handleSaveClick}
-                    disabled={!recordType || !FormComponent || isLoading || isLoadingOptions || Object.values(errors).some(e => !!e)}
-                    startIcon={isLoading ? <CircularProgress size={20} color="inherit" /> : null}
-                >
-                    {isLoading ? "Saving..." : "Save Record"}
-                </CustomButton>
-            </Stack>
-       </Stack>
+              {FormComponent && !isLoadingOptions && (
+                  <FormComponent
+                      formData={formData}
+                      errors={errors}
+                      onChange={handleFormChange}
+                      mode="add"
+                      selectOptions={selectOptions}
+                  />
+              )}
+          </Stack>
+       </DialogContent>
+       <DialogActions sx={{ p: '16px 24px' }}>
+          <Button onClick={onClose} disabled={isLoading}>Cancel</Button>
+          <Button onClick={handleSaveClick} variant="contained" disabled={!recordType || isLoading || isLoadingOptions}>
+              {isLoading ? "Saving..." : "Save Record"}
+          </Button>
+       </DialogActions>
     </PopupModal>
   );
 }

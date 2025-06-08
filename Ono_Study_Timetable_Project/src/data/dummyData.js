@@ -5,26 +5,19 @@ export const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
 // Helper functions for generating IDs according to new format
 const generateStudentId = (index) => `${123456780 + index}`.padStart(9, '0');
 const generateCourseId = (index) => `CRS${String(1000 + index).padStart(7, '0')}`; // CRS + 7 digits
+const studentUsernamesForGeneration = Array.from({ length: 18 }, (_, i) => `student_${i + 2}`);
 
 export const dummyData = {
   students: [
-    // Keep admin and one student for specific tests
-    { id: "000000001", firstName: "Admin", lastName: "User", email: "admin@example.com", username: "adminuser", password: "admin123", courseCodes: ["CRS0000001", "CRS0000002"] },
-    { id: "111111111", firstName: "Alice", lastName: "Smith", email: "alice.s@example.com", username: "alice_s", password: "password123", courseCodes: ["CRS0000001", "CRS0000004"] },
-    // Generate more students
+    { id: "000000001", firstName: "Admin", lastName: "User", email: "admin@example.com", username: "adminuser", password: "admin123", courseCodes: [] },
+    { id: "111111111", firstName: "Alice", lastName: "Smith", email: "alice.s@example.com", username: "alice_s", password: "password123", courseCodes: [] },
     ...Array.from({ length: 18 }, (_, i) => {
         const index = i + 2;
-        const studentId = generateStudentId(index);
-        const courseIndex1 = index % 15; // Cycle through courses
-        const courseIndex2 = (index + 3) % 15;
         return {
-            id: studentId,
-            firstName: `StudentFName${index}`,
-            lastName: `StudentLName${index}`,
-            email: `student${index}@example.com`,
-            username: `student_${index}`,
-            password: "password123",
-            courseCodes: [`CRS${String(1000 + courseIndex1).padStart(7, '0')}`, `CRS${String(1000 + courseIndex2).padStart(7, '0')}`]
+            id: generateStudentId(index),
+            firstName: `StudentFName${index}`, lastName: `StudentLName${index}`,
+            email: `student${index}@example.com`, username: `student_${index}`,
+            password: "password123", courseCodes: []
         };
     })
   ],
@@ -135,9 +128,16 @@ export const dummyData = {
     { eventCode: "E-SPORT25", eventName: "Championship Game", startDate: "2025-11-22", endDate: "2025-11-22", allDay: false, startHour: "19:00", endHour: "21:30", notes: "Stadium" },
     { eventCode: "E-MUSIC25", eventName: "Spring Music Concert", startDate: "2025-05-03", endDate: "2025-05-03", allDay: false, startHour: "19:30", endHour: "21:00", notes: "Theater" },
     { eventCode: "E-CLUB25", eventName: "Club Sign-up Day", startDate: "2025-09-10", endDate: "2025-09-10", allDay: false, startHour: "10:00", endHour: "16:00", notes: "Student Union" },
-     ...Array.from({ length: 9 }, (_, i) => ({
-         eventCode: `E-GEN${i + 12}`, eventName: `Campus Seminar ${i + 1}`, startDate: `2025-0${8 + i % 3}-${10 + i * 2}`, endDate: `2025-0${8 + i % 3}-${10 + i * 2}`, allDay: i % 4 === 0, startHour: "13:00", endHour: "14:30", notes: `Seminar details ${i + 1}`
-     }))
+    ...Array.from({ length: 9 }, (_, i) => {
+        const month = (8 + i % 3).toString().padStart(2, '0'); // '08', '09', '10'
+        const day = (10 + i * 2).toString().padStart(2, '0');   // '10', '12', ... '26'
+        const dateStr = `2025-${month}-${day}`;
+        return {
+            eventCode: `E-GEN${i + 12}`, eventName: `Campus Seminar ${i + 1}`,
+            startDate: dateStr, endDate: dateStr,
+            allDay: i % 4 === 0, startHour: "13:00", endHour: "14:30", notes: `Seminar details ${i + 1}`
+        };
+})
   ],
   tasks: [
     { assignmentCode: "T1-CRS0000001", assignmentName: "React Component", courseCode: "CRS0000001", submissionDate: "2025-11-10", submissionHour: "23:59", notes: "Build a functional component" },
@@ -150,24 +150,30 @@ export const dummyData = {
     { assignmentCode: "T1-CRS0000003", assignmentName: "Sorting Algorithms", courseCode: "CRS0000003", submissionDate: "2026-03-10", submissionHour: "17:00", notes: "" },
     { assignmentCode: "T1-CRS0000008", assignmentName: "Simple Website", courseCode: "CRS0000008", submissionDate: "2026-03-20", submissionHour: "23:59", notes: "HTML/CSS only" },
     { assignmentCode: "T1-CRS0000009", assignmentName: "Process Scheduling", courseCode: "CRS0000009", submissionDate: "2026-04-01", submissionHour: "23:59", notes: "" },
-    ...Array.from({ length: 10 }, (_, i) => ({
-      assignmentCode: `T-GEN${i + 11}`, assignmentName: `Generated Task ${i + 11}`, courseCode: generateCourseId(i % 15), submissionDate: `2026-0${4 + i % 3}-${10 + i}`, submissionHour: "18:00", notes: `Submit via portal ${i+11}`
-    }))
+    ...Array.from({ length: 10 }, (_, i) => {
+        const month = (4 + i % 3).toString().padStart(2, '0'); // '04', '05', '06'
+        const day = (10 + i).toString().padStart(2, '0');     // '10', '11', ... '19'
+        const dateStr = `2026-${month}-${day}`;
+        return {
+            assignmentCode: `T-GEN${i + 11}`, assignmentName: `Generated Task ${i + 11}`,
+            courseCode: generateCourseId(i % 15), submissionDate: dateStr,
+            submissionHour: "18:00", notes: `Submit via portal ${i + 11}`
+        };
+      })
   ],
-  studentEvents: [
-    { studentId: "000000001", eventCode: "SE-ADMIN-1", eventName: " Dentist", startDate: "2025-11-05", endDate: "2025-11-05", allDay: false, startHour: "14:00", endHour: "15:00", notes: "Checkup" },
-    { studentId: "111111111", eventCode: "SE-S1-1", eventName: "Study Group C1", startDate: "2025-11-06", endDate: "2025-11-06", allDay: false, startHour: "18:00", endHour: "20:00", notes: "Library LIB-G1" },
-    { studentId: generateStudentId(2), eventCode: "SE-S2-1", eventName: "Gym Session", startDate: "2025-11-07", endDate: "2025-11-07", allDay: false, startHour: "07:00", endHour: "08:30", notes: "" },
-    { studentId: generateStudentId(3), eventCode: "SE-S3-1", eventName: "Part-time Job", startDate: "2025-11-08", endDate: "2025-11-08", allDay: false, startHour: "16:00", endHour: "20:00", notes: "Bookstore" },
-    { studentId: "111111111", eventCode: "SE-S1-2", eventName: "Movie Night", startDate: "2025-11-09", endDate: "2025-11-09", allDay: false, startHour: "20:00", endHour: "22:30", notes: "" },
-    { studentId: "000000001", eventCode: "SE-ADMIN-2", eventName: "Project Meeting", startDate: "2025-11-12", endDate: "2025-11-12", allDay: false, startHour: "10:00", endHour: "11:00", notes: "Zoom" },
-    { studentId: generateStudentId(4), eventCode: "SE-S4-1", eventName: "Volunteer Work", startDate: "2025-11-15", endDate: "2025-11-15", allDay: true, notes: "Community center" },
-    { studentId: generateStudentId(5), eventCode: "SE-S5-1", eventName: "Driving Lesson", startDate: "2025-11-18", endDate: "2025-11-18", allDay: false, startHour: "13:00", endHour: "14:00", notes: "" },
-    { studentId: generateStudentId(2), eventCode: "SE-S2-2", eventName: "Presentation Prep", startDate: "2025-11-19", endDate: "2025-11-19", allDay: false, startHour: "19:00", endHour: "21:00", notes: "Library" },
-    { studentId: "111111111", eventCode: "SE-S1-3", eventName: "Friend's Birthday", startDate: "2025-11-21", endDate: "2025-11-21", allDay: false, startHour: "19:00", endHour: "23:00", notes: "" },
-    ...Array.from({ length: 10 }, (_, i) => ({
-        studentId: generateStudentId(i % 18 + 2), // Assign to students 2 through 19
-        eventCode: `SE-GEN${i + 11}`, eventName: `Personal Errand ${i + 11}`, startDate: `2025-11-${20 + i}`, endDate: `2025-11-${20 + i}`, allDay: i % 4 === 0, startHour: "11:00", endHour: "11:30", notes: ""
-    }))
+studentEvents: [
+    { studentId: "adminuser", eventCode: "SE-ADMIN-1", eventName: "Dentist", startDate: "2025-11-05", allDay: false, startHour: "14:00", endHour: "15:00" },
+    { studentId: "alice_s", eventCode: "SE-S1-1", eventName: "Study Group C1", startDate: "2025-11-06", allDay: false, startHour: "18:00", endHour: "20:00" },
+    { studentId: "alice_s", eventCode: "SE-S1-2", eventName: "Movie Night", startDate: "2025-11-09", allDay: false, startHour: "20:00", endHour: "22:30" },
+    // --- FIX 1: The generated data now uses the temporary username key ---
+    ...Array.from({ length: 10 }, (_, i) => {
+        const day = (20 + i).toString().padStart(2, '0'); // '20', '21', ... '29'
+        return {
+            studentId: studentUsernamesForGeneration[i % studentUsernamesForGeneration.length], // Cycle through the defined usernames
+            eventCode: `SE-GEN${i + 11}`, eventName: `Personal Errand ${i + 11}`,
+            startDate: `2025-11-${day}`, endDate: `2025-11-${day}`,
+            allDay: i % 4 === 0, startHour: "11:00", endHour: "11:30", notes: ""
+        };
+      })
   ]
 };
