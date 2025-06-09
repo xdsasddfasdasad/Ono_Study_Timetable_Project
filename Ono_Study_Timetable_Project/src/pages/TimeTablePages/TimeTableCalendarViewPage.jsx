@@ -6,7 +6,6 @@ import FullCalendarView from "../../components/calendar/FullCalendarView.jsx";
 import StudentPersonalEventFormModal from "../../components/modals/forms/StudentPersonalEventFormModal.jsx";
 import { useEvents } from "../../context/EventsContext.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
-// --- FIX 1: Import the correct handler names ---
 import { handleSaveOrUpdateRecord, handleDeleteEntity } from "../../handlers/formHandlers.js";
 
 export default function TimeTableCalendarViewPage() {
@@ -37,11 +36,15 @@ export default function TimeTableCalendarViewPage() {
     setIsModalOpen(true);
   }, [currentUser]);
 
+  // --- START: MODIFICATION ---
+  // We are improving the logic to handle different event types correctly.
   const handleEventClick = useCallback((info) => {
     const clickedEvent = info.event;
     const props = clickedEvent.extendedProps || {};
+    const type = props.type || 'unknown';
 
-    if (props.type === 'studentEvent' && props.studentId && currentUser && props.studentId === currentUser.uid) {
+    // Case 1: The event is an editable personal event for the current user.
+    if (type === 'studentEvent' && props.studentId && currentUser && props.studentId === currentUser.uid) {
       const eventForModal = {
         eventCode: props.eventCode || clickedEvent.id,
         eventName: props.eventName || clickedEvent.title || '',
@@ -53,16 +56,37 @@ export default function TimeTableCalendarViewPage() {
       };
       setSelectedPersonalEvent(eventForModal);
       setIsModalOpen(true);
-    } else {
+    } 
+    // Case 2: The event is a holiday or vacation (read-only).
+    else if (type === 'holiday' || type === 'vacation') {
+        const startDate = clickedEvent.start ? clickedEvent.start.toLocaleDateString() : 'N/A';
+        // For multi-day events, the end date in FullCalendar is exclusive. We subtract one day for display.
+        const endDate = clickedEvent.end ? new Date(clickedEvent.end.getTime() - 1).toLocaleDateString() : startDate;
+        
+        let details = `Event: ${clickedEvent.title}\n`;
+        details += `Type: ${type.charAt(0).toUpperCase() + type.slice(1)}\n`; // Capitalize type
+        details += `Duration: ${startDate}`;
+        if (startDate !== endDate) {
+            details += ` to ${endDate}`;
+        }
+
+        // We show an alert because these events are not meant to be edited by students.
+        // This is a clearer message than the previous generic alert.
+        alert(details);
+    }
+    // Case 3: Any other event type (e.g., courseMeeting).
+    else {
+      // This maintains the original behavior for all other events.
       alert(
         `Event Details:\n\n` +
         `Title: ${clickedEvent.title}\n` +
-        `Type: ${props.type || 'N/A'}\n` +
+        `Type: ${type}\n` +
         `Start: ${clickedEvent.start?.toLocaleString() ?? 'N/A'}` +
-        `${clickedEvent.allDay ? ' (All Day)' : ''}`
+        `${clickedEvent.allDay ? '' : `\nEnd: ${clickedEvent.end?.toLocaleString() ?? 'N/A'}`}`
       );
     }
-  }, [currentUser]);
+  }, [currentUser]); // Dependencies are correct
+  // --- END: MODIFICATION ---
 
   const handleSavePersonalEvent = useCallback(async (formDataFromModal) => {
     setModalError("");
@@ -107,24 +131,21 @@ export default function TimeTableCalendarViewPage() {
     }
   }, [currentUser, selectedPersonalEvent, handleCloseModal, refreshEvents]);
 
-  // --- FIX 2: This is the updated delete handler logic ---
   const handleDeletePersonalEvent = useCallback(async (eventCodeToDelete) => {
     if (!eventCodeToDelete) return;
     if (!window.confirm("Are you sure you want to delete this personal event?")) return;
     
     setModalError("");
-
-    // Use the new async handler and check its result
+    
     const result = await handleDeleteEntity("studentEvents", eventCodeToDelete);
 
     if (result.success) {
       handleCloseModal();
-      alert(result.message); // Show success message from handler
+      alert(result.message);
       if (typeof refreshEvents === 'function') {
         refreshEvents();
       }
     } else {
-      // Set the error message in the modal if deletion fails
       setModalError(result.message || "Failed to delete the event.");
     }
   }, [handleCloseModal, refreshEvents]);

@@ -1,51 +1,56 @@
 // src/components/Footer/Footer.jsx
 
 import React from 'react';
-import { Box, Container, Typography, Link as MuiLink } from '@mui/material';
-import { Copyright } from '@mui/icons-material';
+import { Box, Container, Typography, Link as MuiLink, Stack } from '@mui/material';
+import SchoolIcon from '@mui/icons-material/School';
+import CopyrightIcon from '@mui/icons-material/Copyright';
 
-function CopyrightText() {
-  return (
-    <Typography variant="body2" color="text.secondary" align="center">
-      {'Copyright '}
-      <MuiLink color="inherit" href="https://mui.com/">
-        Your Website/App Name
-      </MuiLink>{' '}
-      {new Date().getFullYear()}
-      {'.'}
-    </Typography>
-  );
-}
+const CURRENT_YEAR = new Date().getFullYear();
 
 const Footer = () => {
   return (
     <Box
       component="footer"
       sx={{
-        py: 3,
-        px: 2, 
-        mt: 'auto', 
+        py: 4,
+        px: 2,
+        mt: 'auto',
         backgroundColor: (theme) =>
           theme.palette.mode === 'light'
             ? theme.palette.grey[200]
-            : theme.palette.grey[800],
-        borderTop: (theme) => `1px solid ${theme.palette.divider}`
+            : theme.palette.grey[900],
+        borderTop: (theme) => `1px solid ${theme.palette.divider}`,
       }}
     >
       <Container maxWidth="lg">
-        <Typography variant="body1" align="center" gutterBottom>
-          Ono Timetable Project
-        </Typography>
-        <Typography
-          variant="subtitle1"
-          align="center"
-          color="text.secondary"
-          component="p"
-          sx={{mb: 1}}
-        >
-          Helping students manage their academic schedule effectively.
-        </Typography>
-        <CopyrightText />
+        <Stack spacing={1} alignItems="center">
+          <Typography variant="h6" component="div" gutterBottom>
+            <SchoolIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
+            Ono Timetable Project
+          </Typography>
+          <Typography
+            variant="subtitle1"
+            color="text.secondary"
+            align="center"
+            sx={{ maxWidth: 600 }}
+          >
+            Empowering students with an organized and efficient academic schedule management platform.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" align="center">
+            <CopyrightIcon fontSize="inherit" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
+            {CURRENT_YEAR} – Built with ❤️ by the Triple I Dev Team
+          </Typography>
+          <MuiLink
+            href="https://github.com/xdsasddfasdasad/Ono_Study_Timetable_Project"
+            target="_blank"
+            rel="noopener"
+            underline="hover"
+            color="primary"
+            sx={{ mt: 1 }}
+          >
+            View Source on GitHub
+          </MuiLink>
+        </Stack>
       </Container>
     </Box>
   );

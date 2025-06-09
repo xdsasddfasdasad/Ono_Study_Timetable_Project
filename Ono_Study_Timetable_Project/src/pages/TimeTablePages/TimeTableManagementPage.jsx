@@ -30,9 +30,11 @@ export default function TimeTableManagementPage() {
         loadCourseList();
     }, [loadCourseList]);
 
+    // קוד פשוט: רק מסנן החוצה אירועים של סטודנטים. אין צורך לשנות את הנתונים.
     const adminCalendarEvents = useMemo(() => {
         return allVisibleEvents.filter(event => event.extendedProps?.type !== 'studentEvent');
     }, [allVisibleEvents]);
+
 
     // === HANDLERS ===
     const handleCloseModals = useCallback(() => {
@@ -46,17 +48,12 @@ export default function TimeTableManagementPage() {
         loadCourseList();
     }, [refreshEvents, loadCourseList, handleCloseModals]);
     
-    // --- ✨ לוגיקה חדשה, פשוטה ואמינה לפתיחת מודאלים ---
-    
-    // פונקציה לפתיחת מודאל הוספה
     const openAddModal = (defaultDate = null) => {
         setModalData({ isEditing: false, defaultDate: defaultDate });
         setActiveModal('generic');
     };
 
-    // פונקציה לפתיחת מודאל עריכה
     const openEditModal = (eventData) => {
-        // ודא שה-type הנכון נמצא בנתונים
         let recordType = eventData.type;
         if (eventData.type === 'yearMarker') recordType = 'year';
         if (eventData.type === 'semesterMarker') recordType = 'semester';
@@ -64,32 +61,44 @@ export default function TimeTableManagementPage() {
         setModalData({ isEditing: true, data: { ...eventData, type: recordType } });
         setActiveModal('generic');
     };
-
+    
+    // הלוגיקה הזו תמיד הייתה נכונה. היא מקבלת את האירוע, עם הסוג המקורי שלו,
+    // ומעבירה אותו למודאל הנכון. כעת שהתצוגה תקינה, גם הפונקציונליות תעבוד.
     const handleEventClick = useCallback((clickInfo) => {
-        const props = clickInfo.event.extendedProps;
-        console.log("Event clicked:", props);
+        const event = clickInfo.event;
+        const props = event.extendedProps;
 
         switch (props?.type) {
             case 'courseMeeting':
-                setModalData(props); // נתונים למודאל פגישות
+                setModalData(props);
                 setActiveModal('courseMeetings');
                 break;
             
-            // כל אלו יפתחו את מודאל העריכה הגנרי
             case 'holiday':
             case 'vacation':
             case 'event':
             case 'task':
-            case 'yearMarker': // שם הסוג מ-getAllVisibleEvents
-            case 'semesterMarker': // שם הסוג מ-getAllVisibleEvents
-                openEditModal(props);
+            case 'yearMarker':
+            case 'semesterMarker':
+                {
+                    const dataForModal = {
+                        ...props,
+                        id: event.id,
+                        title: event.title,
+                        start: event.start,
+                        end: event.end,
+                        allDay: event.allDay,
+                    };
+                    openEditModal(dataForModal);
+                }
                 break;
 
             default:
-                alert(`Cannot edit '${props.type}' from the calendar.`);
+                alert(`Cannot edit an event of type '${props?.type}' directly from the calendar.`);
                 break;
         }
     }, []);
+
 
     const handleDateClick = useCallback((dateClickInfo) => {
         openAddModal(dateClickInfo.dateStr);
@@ -120,13 +129,11 @@ export default function TimeTableManagementPage() {
 
             {/* --- All Modals --- */}
             
-            {/* ✨ --- קריאה פשוטה וברורה למודאל הגנרי --- ✨ */}
             {activeModal === 'generic' && (
                 <TimeTableCalendarManageModal
                     open={true}
                     onClose={handleCloseModals}
                     onSave={handleSaveSuccess}
-                    // המודאל יקבל את כל הנתונים ויחליט בעצמו אם להציג הוספה או עריכה
                     initialData={modalData?.data}
                     defaultDate={modalData?.defaultDate}
                 />

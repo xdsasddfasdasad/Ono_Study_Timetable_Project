@@ -1,137 +1,181 @@
-import React, { useState, useCallback } from 'react';
-import { Box, Typography, Grid, Paper, Link as MuiLink, Icon, Button, Stack, Divider, Chip } from '@mui/material';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Box, Typography, Grid, Paper, Icon, ListItemIcon, Button, Stack, Divider, Chip, CircularProgress, Alert, List, ListItem, ListItemText, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import StudentPersonalEventFormModal from '../components/modals/forms/StudentPersonalEventFormModal';
-import { handleSaveOrUpdateRecord } from "../handlers/formHandlers";
-import { useEvents } from '../context/EventsContext';
+import { getAllVisibleEvents } from '../utils/getAllVisibleEvents';
+import { fetchCollection } from '../firebase/firestoreService';
+import { format, parseISO, compareAsc, isFuture, startOfDay, endOfDay, isWithinInterval, isValid, addDays } from 'date-fns';
+
+// --- Icons ---
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import SupervisedUserCircleIcon from '@mui/icons-material/SupervisedUserCircle';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import EventIcon from '@mui/icons-material/Event';
+import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import SchoolIcon from '@mui/icons-material/School';
-import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 
-const HomeActionCard = ({ title, to, icon, description, onClick, color = "primary" }) => (
+// --- Constants & Helpers ---
+const EVENT_STYLES = {
+    courseMeeting: { color: '#3788d8', label: 'Course Meeting', icon: <SchoolIcon fontSize="small"/> },
+    studentEvent: { color: '#ffc107', label: 'Personal Event', icon: <EventIcon fontSize="small"/> },
+    holiday: { color: '#e3342f', label: 'Holiday', icon: <HelpOutlineIcon fontSize="small"/> },
+    vacation: { color: '#f6993f', label: 'Vacation', icon: <HelpOutlineIcon fontSize="small"/> },
+    event: { color: '#38c172', label: 'General Event', icon: <EventIcon fontSize="small"/> },
+    task: { color: '#8e44ad', label: 'Task', icon: <TaskAltIcon fontSize="small"/> },
+    default: { color: '#6c757d', label: 'Other', icon: <HelpOutlineIcon fontSize="small"/> }
+};
+const getEventStyle = (type) => EVENT_STYLES[type] || EVENT_STYLES.default;
+
+const toValidDate = (dateInput) => {
+    if (!dateInput) return null;
+    if (dateInput instanceof Date) return dateInput;
+    if (typeof dateInput.toDate === 'function') return dateInput.toDate();
+    try { const date = parseISO(String(dateInput)); return isValid(date) ? date : null; } 
+    catch { return null; }
+};
+
+const HomeActionCard = ({ title, to, icon, description, color = "primary" }) => (
     <Grid item xs={12} sm={6} md={4}>
         <Paper
             elevation={2}
+            component={RouterLink} 
+            to={to}
             sx={{
                 p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%',
                 borderTop: 3, borderColor: `${color}.main`, transition: 'all 0.3s ease',
+                textDecoration: 'none',
                 '&:hover': { boxShadow: 6, transform: 'translateY(-4px)' }
             }}
         >
             <Icon component={icon} sx={{ fontSize: 48, color: `${color}.main`, mb: 2 }} />
-            <Typography variant="h6" component="div" sx={{ textAlign: 'center', mb: 1 }}> {title} </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 3, flexGrow: 1 }}> {description} </Typography>
-            {to ? (
-                <Button component={RouterLink} to={to} variant="contained" color={color} size="small"> Go to {title} </Button>
-             ) : (
-                 <Button variant="contained" color={color} size="small" onClick={onClick}> {title} </Button>
-             )}
+            <Typography variant="h6" component="div" sx={{ textAlign: 'center', mb: 1, color: 'text.primary' }}> {title} </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', flexGrow: 1 }}> {description} </Typography>
         </Paper>
     </Grid>
 );
 
+// --- Main Component ---
 export default function HomePage() {
-    const { currentUser } = useAuth();
-    const { refreshStudentEvents } = useEvents();
+    // --- State ---
+    const { currentUser, isLoadingAuth } = useAuth();
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [rawData, setRawData] = useState({ events: [], tasks: [] });
+    const [upcomingTimeFilter, setUpcomingTimeFilter] = useState('week');
 
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [modalDefaultDate, setModalDefaultDate] = useState(null);
-    const [modalError, setModalError] = useState("");
-    const [validationErrors, setValidationErrors] = useState({});
-
-    const handleCloseModal = useCallback(() => {
-        setIsModalOpen(false); setModalDefaultDate(null);
-        setModalError(""); setValidationErrors({});
-    }, []);
-
-    const handleOpenQuickAdd = useCallback(() => {
-        if (!currentUser) return;
-        setModalDefaultDate(new Date().toISOString().split('T')[0]);
-        setModalError(""); setValidationErrors({});
-        setIsModalOpen(true);
-    }, [currentUser]);
-
-    const handleSavePersonalEvent = useCallback(async (formDataFromModal) => {
-        setModalError(""); setValidationErrors({});
-        if (!currentUser?.uid) { setModalError("User not identified."); return; }
-
-        const actionType = "add";
-        const entityKey = 'studentEvents';
-        const eventDataForStorage = {
-            eventCode: `sevt-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-            eventName: formDataFromModal.eventName, notes: formDataFromModal.notes || "",
-            startDate: formDataFromModal.date, endDate: formDataFromModal.date,
-            allDay: formDataFromModal.allDay || false,
-            startHour: formDataFromModal.allDay ? null : formDataFromModal.startTime,
-            endHour: formDataFromModal.allDay ? null : formDataFromModal.endTime,
-            studentId: currentUser.uid,
+    // --- Data Fetching ---
+    useEffect(() => {
+        if (isLoadingAuth) return;
+        const loadUpcomingData = async () => {
+            setIsLoading(true); setError(null);
+            try {
+                const [events, tasks] = await Promise.all([
+                    getAllVisibleEvents(currentUser),
+                    fetchCollection('tasks')
+                ]);
+                setRawData({ events: events || [], tasks: tasks || [] });
+            } catch (err) { console.error("[HomePage] Error loading data:", err); setError("Failed to load upcoming data."); } 
+            finally { setIsLoading(false); }
         };
-        try {
-          const result = await handleSaveOrUpdateRecord(
-              entityKey, eventDataForStorage, actionType,
-              { recordType: 'studentEvent', editingId: null }, false
-          );
-          if (result.success) {
-            handleCloseModal();
-            if (typeof refreshStudentEvents === 'function') { refreshStudentEvents(); }
-            alert("Personal event added successfully!");
-          } else {
-            setValidationErrors(result.errors || {});
-            setModalError(result.message || `Failed to add event.`);
-          }
-        } catch (error) {
-           setModalError(`An unexpected error occurred: ${error.message || 'Unknown error'}`);
-           console.error("[HomePage] Error saving personal event:", error);
-        }
-    }, [currentUser, handleCloseModal, refreshStudentEvents]);
+        loadUpcomingData();
+    }, [currentUser, isLoadingAuth]);
 
-    if (!currentUser) {
-        return (
-             <Box sx={{ p: 3, textAlign: 'center' }}>
-                 <Typography>Authenticating...</Typography>
-             </Box>
-        );
+    // --- Derived State (Memoized Calculations) ---
+    const { upcomingEvents, upcomingTasks } = useMemo(() => {
+        const { events, tasks } = rawData;
+        const now = new Date(); let startDate = startOfDay(now); let endDate;
+        switch (upcomingTimeFilter) {
+            case 'today': endDate = endOfDay(now); break;
+            case 'month': endDate = addDays(startDate, 30); break;
+            default: endDate = addDays(startDate, 7);
+        }
+        const isTodayFilter = upcomingTimeFilter === 'today';
+        const calcUpcomingEvents = (events || []).filter(e => { const d = toValidDate(e.start); return d && (isTodayFilter ? isWithinInterval(d, { start: startDate, end: endDate }) : isFuture(d) && isWithinInterval(d, { start: startDate, end: endDate })); }).sort((a, b) => compareAsc(toValidDate(a.start), toValidDate(b.start))).slice(0, 5);
+        const relevantTasks = (tasks || []).filter(t => !t.studentId || t.studentId === currentUser?.uid);
+        const calcUpcomingTasks = relevantTasks.filter(t => { const d = toValidDate(t.submissionDate); return d && (isTodayFilter ? isWithinInterval(d, { start: startDate, end: endDate }) : isFuture(d) && isWithinInterval(d, { start: startDate, end: endDate })); }).sort((a, b) => compareAsc(toValidDate(a.submissionDate), toValidDate(b.submissionDate))).slice(0, 5);
+        return { upcomingEvents: calcUpcomingEvents, upcomingTasks: calcUpcomingTasks };
+    }, [rawData, upcomingTimeFilter, currentUser]);
+
+    if (isLoadingAuth) {
+        return ( <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress /></Box> );
     }
 
     return (
         <Box sx={{ flexGrow: 1, p: { xs: 2, sm: 3 }, maxWidth: '1200px', mx: 'auto' }}>
             <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 1 }}>
-                Welcome, {currentUser?.firstName || currentUser?.username || currentUser?.email || 'Guest'}!
+                Welcome, {currentUser?.firstName || 'User'}!
             </Typography>
             <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 5 }}>
                 Your central hub for managing your schedule.
             </Typography>
 
-            <Typography variant="h6" component="div" sx={{ mb: 2 }}> Quick Actions </Typography>
             <Grid container spacing={3}>
-                 <HomeActionCard title="My Timetable" description="View your weekly schedule." icon={CalendarMonthIcon} to="/timetable/calendar" color="primary" />
-                 <HomeActionCard title="Timetable List" description="See upcoming items in a list." icon={FormatListBulletedIcon} to="/timetable/list" color="primary" />
-                 <HomeActionCard title="Dashboard" description="Overview and statistics." icon={DashboardIcon} to="/dashboard" color="primary" />
-                 <HomeActionCard title="Quick Add Event" description="Add a personal event to your calendar." icon={AddCircleOutlineIcon} onClick={handleOpenQuickAdd} color="success" />
-                 <HomeActionCard title="Help & Support" description="Find answers and guides." icon={HelpOutlineIcon} to="/help" color="info" />
-                <Grid item xs={12}><Divider sx={{my: 3}}><Chip label="Management Tools"/></Divider></Grid>
-                <HomeActionCard title="Manage Timetable" description="Administer all calendar entries." icon={SettingsIcon} to="/timetable/management"color="secondary" />
-                <HomeActionCard title="Manage Students" description="Handle student accounts." icon={SupervisedUserCircleIcon} to="/students" color="secondary" />
-            </Grid>
+                <Grid item xs={12} md={8}>
+                    <Typography variant="h6" component="div" sx={{ mb: 2 }}> Quick Actions </Typography>
+                    <Grid container spacing={3}>
+                        <HomeActionCard title="My Timetable" description="View your weekly schedule." icon={CalendarMonthIcon} to="/timetable/calendar" color="primary" />
+                        <HomeActionCard title="Timetable List" description="See upcoming items in a list." icon={FormatListBulletedIcon} to="/timetable/list" color="primary" />
+                        <HomeActionCard title="Dashboard" description="Overview and statistics." icon={DashboardIcon} to="/dashboard" color="primary" />
+                    </Grid>
 
-            {isModalOpen && (
-                <StudentPersonalEventFormModal
-                    open={isModalOpen}
-                    onClose={handleCloseModal}
-                    onSave={handleSavePersonalEvent}
-                    onDelete={()=>{ alert("Delete not available from Quick Add."); }}
-                    initialData={null}
-                    defaultDate={modalDefaultDate}
-                    errorMessage={modalError}
-                    validationErrors={validationErrors}
-                />
-             )}
+                    <Divider sx={{my: 4}}><Chip label="Management Tools"/></Divider>
+                    
+                    <Grid container spacing={3}>
+                        <HomeActionCard title="Manage Timetable" description="Administer all calendar entries." icon={SettingsIcon} to="/timetable/management" color="secondary" />
+                        <HomeActionCard title="Manage Students" description="Handle student accounts." icon={SupervisedUserCircleIcon} to="/students" color="secondary" />
+                        <HomeActionCard title="Help & Support" description="Find answers and guides." icon={HelpOutlineIcon} to="/help" color="info" />
+                    </Grid>
+                </Grid>
+                
+                {/* --- Upcoming Events & Tasks Panel --- */}
+                <Grid item xs={12} md={4}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb: 2}}>
+                        <Typography variant="h6" component="div">Upcoming</Typography>
+                        <FormControl size="small" sx={{minWidth: 140}}>
+                            <InputLabel>Time Window</InputLabel>
+                            <Select value={upcomingTimeFilter} label="Time Window" onChange={(e) => setUpcomingTimeFilter(e.target.value)}>
+                                <MenuItem value="today">Today</MenuItem>
+                                <MenuItem value="week">Next 7 Days</MenuItem>
+                                <MenuItem value="month">Next 30 Days</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Stack>
+
+                    {isLoading ? <CircularProgress /> : error ? <Alert severity="error">{error}</Alert> : (
+                        <Paper elevation={2} sx={{p: 2}}>
+                            <Typography variant="subtitle1" sx={{fontWeight: 'bold', mb: 1}}>Events</Typography>
+                            {upcomingEvents.length > 0 ? (
+                                <List dense disablePadding>
+                                    {upcomingEvents.map(e => (
+                                        <ListItem key={e.id} disableGutters>
+                                            <ListItemIcon sx={{minWidth: 32}}>{getEventStyle(e.extendedProps.type).icon}</ListItemIcon>
+                                            <ListItemText primary={e.title} secondary={format(toValidDate(e.start), 'eeee, HH:mm')} />
+                                        </ListItem>
+                                    ))}
+                                </List>
+                            ) : (<Typography variant="body2" color="text.secondary">No upcoming events.</Typography>)}
+
+                            <Divider sx={{my: 2}} />
+                            
+                            <Typography variant="subtitle1" sx={{fontWeight: 'bold', mb: 1}}>Tasks</Typography>
+                            {upcomingTasks.length > 0 ? (
+                                <List dense disablePadding>
+                                    {upcomingTasks.map(t => (
+                                        <ListItem key={t.taskCode} disableGutters>
+                                            <ListItemIcon sx={{minWidth: 32}}>{getEventStyle('task').icon}</ListItemIcon>
+                                            <ListItemText primary={t.title} secondary={`Due: ${format(toValidDate(t.submissionDate), 'eeee, MMM d')}`} />
+                                        </ListItem>
+                                    ))}
+                                </List>
+                            ) : (<Typography variant="body2" color="text.secondary">No upcoming tasks.</Typography>)}
+                        </Paper>
+                    )}
+                </Grid>
+            </Grid>
         </Box>
     );
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -7,12 +7,11 @@ import { Tooltip, Typography, Box, Link as MuiLink } from '@mui/material';
 import { fetchCollection } from '../../firebase/firestoreService';
 
 export default function FullCalendarView({ events, onDateClick, onEventClick }) {
-    console.log("[FullCalendarView] Rendering with", events?.length, "events");
     const [roomSiteMap, setRoomSiteMap] = useState(new Map());
     const [isLoadingMap, setIsLoadingMap] = useState(true); 
+
     useEffect(() => {
         const createRoomSiteMap = async () => {
-            console.log("[FullCalendarView:createRoomSiteMap] Fetching sites from Firestore...");
             setIsLoadingMap(true);
             try {
                 const sites = await fetchCollection("sites");
@@ -25,7 +24,6 @@ export default function FullCalendarView({ events, onDateClick, onEventClick }) 
                     });
                 });
                 setRoomSiteMap(map);
-                console.log("[FullCalendarView:createRoomSiteMap] Room-Site map created:", map.size, "entries");
             } catch (error) {
                 console.error("[FullCalendarView:createRoomSiteMap] Error fetching sites or creating map:", error);
                 setRoomSiteMap(new Map());
@@ -83,7 +81,13 @@ export default function FullCalendarView({ events, onDateClick, onEventClick }) 
                     {lecturerDisplay && ( <Box component="span" title={`Lecturer: ${lecturerDisplay}`}> | <Box component="span" sx={{ mr: 0.25 }}>🧑‍🏫</Box> {lecturerDisplay} </Box> )}
                     </Typography>
                 )}
-                {props.notes && ['studentEvent', 'event', 'task', 'courseMeeting'].includes(props.type) && ( <Box component="span" title="Has notes" sx={{ fontSize: '0.8em', opacity: 0.7, ml: '3px' }}>📝</Box> )}
+                {/* --- START: FIX 1 --- */}
+                {/* הבעיה: הקוד המקורי לא כלל 'holiday' ו-'vacation' כאן, ולכן הם לא הציגו את אייקון הפתק. */}
+                {/* התיקון: הוספנו אותם למערך. עכשיו הם יציגו את האייקון, בדיוק כמו 'event'. */}
+                {props.notes && ['studentEvent', 'event', 'task', 'courseMeeting', 'holiday', 'vacation'].includes(props.type) && ( 
+                    <Box component="span" title="Has notes" sx={{ fontSize: '0.8em', opacity: 0.7, ml: '3px' }}>📝</Box> 
+                )}
+                {/* --- END: FIX 1 --- */}
             </Box>
         );
     };
@@ -109,10 +113,19 @@ export default function FullCalendarView({ events, onDateClick, onEventClick }) 
                 </Tooltip>
             )}
             eventClassNames={(arg) => {
-                const type = arg.event.extendedProps?.type || 'unknown';
-                const classes = [`eventType-${type}`];
+                let type = arg.event.extendedProps?.type || 'unknown';
+                
+                // --- START: FIX 2 ---
+                // הבעיה: הקוד המקורי נתן קלאס ייחודי ל'holiday' ו'vacation', מה שגרם לעיצוב שונה.
+                // התיקון: אנחנו מאחדים אותם. אם הסוג הוא חג או חופשה, אנחנו מתייחסים אליו כאל 'event'
+                // לצורך קביעת העיצוב (CSS class). זה מאלץ אותם לקבל את אותו עיצוב כמו אירוע רגיל.
+                if (type === 'holiday' || type === 'vacation') {
+                    type = 'event';
+                }
+                // --- END: FIX 2 ---
+
+                const classes = [`eventType-${type}`]; 
                 if (arg.event.allDay) classes.push('fc-event-allday');
-                if (arg.event.display === 'block') classes.push('fc-event-block-display');
                 return classes;
             }}
             eventDisplay='auto'
