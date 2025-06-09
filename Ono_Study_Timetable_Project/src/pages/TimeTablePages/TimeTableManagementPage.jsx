@@ -105,9 +105,9 @@ export default function TimeTableManagementPage() {
 
             <Stack direction="row" spacing={2} mb={3} justifyContent="center" flexWrap="wrap">
                 <Button variant="contained" onClick={() => openAddModal(new Date().toISOString().split('T')[0])}>Add Entry</Button>
-                <Button variant="contained" color="secondary" onClick={() => setActiveModal('courseDef')}>Manage Courses</Button>
+                <Button variant="contained" onClick={() => setActiveModal('courseDef')}>Manage Courses</Button>
                 <Button variant="contained" onClick={() => setActiveModal('courseMeetings')}>Manage Meetings</Button>
-                <Button variant="outlined" onClick={() => setActiveModal('entities')}>Manage Entities</Button>
+                <Button variant="contained" onClick={() => setActiveModal('entities')}>Manage Entities</Button>
             </Stack>
 
             {isCurrentlyLoading ? (
