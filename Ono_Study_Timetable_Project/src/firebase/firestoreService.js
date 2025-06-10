@@ -8,9 +8,33 @@ import {
 
 // ✅ Import the initialized 'db' instance ONCE from your firebaseConfig
 import { db } from './firebaseConfig'; // Adjust path if needed
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { app } from './firebaseConfig'; // Your initialized Firebase app
+
+const storage = getStorage(app);
 
 const SEED_FLAG_COLLECTION = '_app_seed_status';
 const SEED_FLAG_DOC_ID = 'initialSeedDone';
+
+
+/**
+ * Uploads a file to a specified path in Firebase Storage.
+ * @param {File} file - The file object to upload.
+ * @param {string} path - The destination path in storage (e.g., 'message-attachments/some-id').
+ * @returns {Promise<{downloadURL: string, filePath: string}>} The download URL and path of the uploaded file.
+ */
+export const uploadFile = async (file, path) => {
+    if (!file || !path) throw new Error("File and path are required for upload.");
+    
+    const storageRef = ref(storage, `${path}/${file.name}`);
+    console.log(`[FirestoreService] Uploading file to: ${storageRef.fullPath}`);
+    
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    
+    console.log('[FirestoreService] File uploaded successfully. URL:', downloadURL);
+    return { downloadURL, filePath: snapshot.ref.fullPath };
+};
 
 /**
  * Checks if the initial database seed has already been performed.

@@ -1,41 +1,27 @@
 // src/context/AgentContext.jsx
 
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
-import { useAuth } from './AuthContext'; // To get the current user's context
+import { useAuth } from './AuthContext';
 import { runAIAgent } from '../services/geminiService';
 import { agentTools } from '../config/aiTools';
 
 const AgentContext = createContext(null);
+export const useAgent = () => useContext(AgentContext);
 
-export const useAgent = () => {
-    const context = useContext(AgentContext);
-    if (context === undefined) {
-        throw new Error('useAgent must be used within an AgentProvider');
-    }
-    return context;
-};
-
-// This function dynamically creates the system instruction with up-to-date context.
 const getSystemInstruction = (user) => {
     const today = new Date().toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const userName = user ? `${user.firstName} ${user.lastName}` : 'אורח';
-    const userId = user ? user.uid || user.username : 'N/A';
-
     return `
-הנחיית מערכת: אתה "יועץ לוח זמנים", סוכן AI מומחה וידידותי למערכת Timetable Pro.
-תפקידך להבין בקשות של משתמשים בעברית ולהשתמש בכלים שסופקו לך כדי לבצע אותן.
-
+הנחיית מערכת: אתה "יועץ לוח זמנים".
 ההקשר הנוכחי:
 - התאריך של היום הוא: ${today}.
-- המשתמש המחובר כעת הוא: "${userName}" (עם המזהה: ${userId}).
-- השתמש במזהה זה באופן אוטומטי עבור כל פעולה אישית שהמשתמש מבקש. אל תבקש ממנו את המזהה שלו.
-
+- המשתמש המחובר כעת הוא: "${userName}". אל תבקש ממנו את זהותו.
 כללי הזהב שלך:
-1.  ענה תמיד בעברית רהוטה ומנומסת.
-2.  אל תענה "אני לא יכול" או "אין לי גישה". תפקידך הוא להשתמש בכלי 'findRecords' כדי למצוא את המידע שהמשתמש צריך.
-3.  הבן שפה טבעית. אם המשתמש כותב "השבוע" או "15.6", השתמש בטקסט הזה בפרמטר 'dateQuery'. אם הוא כותב "הקורס של ריאקט", השתמש בטקסט הזה בפרמטר 'searchText'.
-4.  אשר לפני ביצוע פעולות כתיבה ('saveOrUpdateRecord') או מחיקה ('deleteRecord'). הצג למשתמש סיכום ברור של הפעולה ובקש את אישורו.
-5.  אם חסר לך מידע, שאל שאלות הבהרה נקודתיות.
+1. ענה תמיד בעברית.
+2. כדי לענות על שאלות, חובה להשתמש בכלי 'findRecords'.
+3. הבן שפה טבעית כמו "מחר" או "15.6".
+4. אשר לפני ביצוע פעולות כתיבה או מחיקה.
+5. אם חסר לך מידע, שאל שאלות הבהרה.
 `;
 };
 
@@ -45,79 +31,73 @@ export const AgentProvider = ({ children }) => {
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    // This effect sets the initial greeting message when the modal opens for the first time.
     useEffect(() => {
         if (isAgentOpen && messages.length === 0) {
             setMessages([
-                {
-                    role: 'agent',
-                    text: `שלום ${currentUser?.firstName || ''}, אני יועץ לוח הזמנים האישי שלך. איך אפשר לעזור היום?`,
-                    functionCall: null,
-                }
+                { role: 'agent', text: `שלום ${currentUser?.firstName || ''}, אני יועץ לוח הזמנים שלך. איך אפשר לעזור?` }
             ]);
         }
     }, [isAgentOpen, messages.length, currentUser]);
 
-    /**
-     * Handles sending new content to the AI and updating the chat state.
-     * @param {string | object[]} messageContent - The user's text or a functionResponse object array.
-     */
-    const sendMessage = useCallback(async (messageContent) => {
+    const sendMessage = useCallback(async (messageContent, isFunctionResponse = false) => {
         if (isLoading) return;
         if (typeof messageContent === 'string' && !messageContent.trim()) return;
 
         setIsLoading(true);
         let currentMessages = messages;
 
-        // Add user's new message to the state for immediate UI update.
-        if (typeof messageContent === 'string') {
-            const userMessage = { role: 'user', text: messageContent, functionCall: null };
+        // Add the new part to the conversation history
+        if (isFunctionResponse) {
+            // This is the result from our AIFunctionHandler
+            const functionMessage = { role: 'function', response: messageContent };
+            currentMessages = [...messages, functionMessage];
+        } else {
+            // This is a new message from the user
+            const userMessage = { role: 'user', text: messageContent };
             currentMessages = [...messages, userMessage];
-            setMessages(currentMessages);
         }
+        setMessages(currentMessages);
         
         try {
-            // Prepare history for the API, excluding our hardcoded greeting.
             const history = currentMessages.slice(1).map(msg => {
                 if (msg.role === 'agent' && msg.functionCall) {
                     return { role: 'model', parts: [{ functionCall: msg.functionCall }] };
                 }
-                // --- THIS IS THE CORRECT WAY TO FORMAT A FUNCTION RESPONSE FOR THE HISTORY ---
-                if (msg.role === 'user' && Array.isArray(messageContent)) { 
-                    // This 'messageContent' is the function response from the handler
-                    return { role: 'user', parts: messageContent };
+                if (msg.role === 'function') {
+                    // This is the crucial part that fixes the error
+                    return { role: 'function', parts: [{ functionResponse: msg.response }] };
                 }
                 return { role: msg.role === 'agent' ? 'model' : 'user', parts: [{ text: msg.text }] };
             });
             
-            const messageToSend = typeof messageContent === 'string' ? messageContent : messageContent;
-            const systemInstruction = getSystemInstruction(currentUser);
+            // The service expects only the *newest* part of the conversation
+            const latestMessage = currentMessages[currentMessages.length - 1];
+            let messageToSend = [];
+            if (latestMessage.role === 'user') {
+                messageToSend = latestMessage.text;
+            } else if (latestMessage.role === 'function') {
+                messageToSend.push({ functionResponse: latestMessage.response });
+            }
 
-            // Call the stateless service function.
             const { response: agentResponse } = await runAIAgent(
                 history,
                 messageToSend,
                 agentTools,
-                systemInstruction
+                getSystemInstruction(currentUser)
             );
             
-            // Add the AI's new response to our state.
             setMessages(prev => [...prev, agentResponse]);
 
         } catch (error) {
-            console.error("AgentContext: Error during sendMessage:", error);
-            setMessages(prev => [...prev, { role: 'agent', text: `אני מתנצל, אירעה שגיאה: ${error.message}`, functionCall: null }]);
+            console.error("AgentContext Error:", error);
+            setMessages(prev => [...prev, { role: 'agent', text: `אני מתנצל, אירעה שגיאה: ${error.message}` }]);
         } finally {
             setIsLoading(false);
         }
     }, [messages, isLoading, currentUser]);
 
     const value = useMemo(() => ({
-        isAgentOpen,
-        setIsAgentOpen,
-        messages,
-        isLoading,
-        sendMessage,
+        isAgentOpen, setIsAgentOpen, messages, isLoading, sendMessage,
     }), [isAgentOpen, messages, isLoading, sendMessage]);
 
     return (
