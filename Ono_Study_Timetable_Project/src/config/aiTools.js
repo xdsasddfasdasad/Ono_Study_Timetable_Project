@@ -1,19 +1,17 @@
 // src/config/aiTools.js
 
 // This file defines the "toolbox" for our AI agent.
-// Each tool is a function declaration that tells the Gemini model what actions
-// it can request from our application. The descriptions, written in Hebrew,
-// are crucial for the AI to understand the purpose of each tool and its parameters.
+// Each tool has a clear name, a detailed description in Hebrew to guide the AI,
+// and a precise definition of the parameters it expects.
 
 export const agentTools = [
   // ====================================================================
   // TOOL 1: Universal "Find/Search" Tool
-  // This is a read-only tool to help the AI find information before
-  // deciding to act or answering user questions.
+  // The AI's "eyes" into the system's data.
   // ====================================================================
   {
     name: "findRecords",
-    description: "כלי חיוני לענות על כל שאלה של משתמש. יש להשתמש בו כדי לחפש, למצוא, לקבל או להציג מידע על כל ישות במערכת. זו הדרך היחידה לגשת לנתונים. חובה להשתמש בו לשאלות כמו 'מה האירועים שלי היום?', 'כמה קורסים יש לי בסמסטר א'?', 'מה החג הקרוב?', או 'הצג את כל המרצים'.",
+    description: "כלי חיוני לענות על כל שאלה של משתמש לגבי לוח הזמנים, קורסים, חגים, או כל נתון אחר במערכת. יש להשתמש בכלי זה כדי לחפש, למצוא, ולקבל מידע. זו הדרך היחידה שלך לגשת לנתונים. חובה להשתמש בו לשאלות כמו 'מה האירועים שלי היום?', 'כמה קורסים יש לי?', 'מה החג הקרוב?'. זכור, המערכת כבר יודעת מי המשתמש המחובר, אין צורך לבקש ממנו מזהה.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -21,45 +19,38 @@ export const agentTools = [
           type: "STRING",
           description: "סוג הרשומה לחיפוש. חייב להיות אחד מ: 'studentEvent', 'courseMeeting', 'course', 'lecturer', 'site', 'room', 'semester', 'year', 'holiday', 'vacation', 'event', 'task'.",
         },
-        // --- Flexible Search Filters ---
-        filters: {
-            type: "OBJECT",
-            description: "אובייקט המכיל את כל מסנני החיפוש. לדוגמה: { searchText: 'מבוא', dateQuery: 'השבוע הבא' }",
-            properties: {
-                searchText: {
-                  type: "STRING",
-                  description: "טקסט חופשי לחיפוש בשדות כמו שם או כותרת (למשל, שם קורס, שם אירוע, שם מרצה).",
-                },
-                dateQuery: {
-                  type: "STRING",
-                  description: "שאילתת תאריך בשפה טבעית, למשל: 'מחר', 'השבוע', 'היום', 'בחודש הבא', '15.6.2025'."
-                },
-                // Add specific ID filters for relational queries
-                courseId: { type: "STRING", description: "סנן לפי מזהה קורס ספציפי." },
-                lecturerId: { type: "STRING", description: "סנן לפי מזהה מרצה ספציפי." },
-                studentId: { type: "STRING", description: "סנן לפי מזהה סטודנט ספציפי." },
-            }
-        }
+        // --- SIMPLIFIED AND MORE POWERFUL FILTERS ---
+        searchText: {
+          type: "STRING",
+          description: "טקסט חופשי לחיפוש כללי. יכול להכיל שם של קורס, שם אירוע, או כל מונח אחר שהמשתמש ציין. לדוגמה: 'מבוא לריאקט', 'חופשת חנוכה'.",
+        },
+        dateQuery: {
+          type: "STRING",
+          description: "שאילתת תאריך בשפה טבעית, למשל: 'מחר', 'השבוע הבא', 'היום', 'בחודש הבא', '15.6.2025', 'סמסטר א 2025'."
+        },
       },
+      // Only recordType is mandatory. The AI can decide to search for all items of a type.
       required: ["recordType"],
     },
   },
 
   // ====================================================================
   // TOOL 2: Universal "Save or Update" Tool
-  // This tool performs all create and update operations.
+  // The AI's "hands" for writing data.
   // ====================================================================
   {
     name: "saveOrUpdateRecord",
-    description: "כלי להוספה, יצירה, קביעה או עריכה של כל ישות במערכת (אירוע, פגישה, קורס, סטודנט וכו'). יש להשתמש בו רק לאחר איסוף כל המידע הנחוץ מהמשתמש. הפרמטר 'recordType' הוא קריטי. לעריכה, חובה לספק את ה-'id' של הפריט הקיים.",
+    description: "כלי להוספה, יצירה, קביעה או עריכה של כל ישות במערכת. יש להשתמש בו רק לאחר איסוף כל המידע הנחוץ מהמשתמש. הפרמטר 'recordType' הוא קריטי. לעריכה, חובה לספק את ה-'id' של הפריט הקיים. עבור אירועים אישיים, המערכת תשייך אותם אוטומטית למשתמש המחובר.",
     parameters: {
       type: "OBJECT",
       properties: {
         recordType: {
           type: "STRING",
-          description: "סוג הרשומה לשמירה. חייב להיות אחד מ: 'studentEvent', 'courseMeeting', 'course', 'lecturer', 'site', 'room', 'semester', 'year', 'holiday', 'vacation', 'event', 'task'.",
+          description: "סוג הרשומה לשמירה. חייב להיות אחד מ: 'studentEvent', 'courseMeeting', 'course', 'lecturer', וכו'.",
         },
+        // The ID is only needed for editing existing records.
         id: { type: "STRING", description: "ה-ID הייחודי של הפריט אותו רוצים לערוך. יש להשמיט עבור יצירת פריט חדש." },
+        // A generic data object. The AI will construct this based on the conversation.
         data: {
             type: "OBJECT",
             description: "אובייקט המכיל את כל השדות והערכים של הרשומה לשמירה. לדוגמה: { eventName: 'פגישה חשובה', date: '2025-12-25', startHour: '11:00' }. יש לכלול את כל שדות החובה הרלוונטיים לסוג הרשומה.",
@@ -71,6 +62,7 @@ export const agentTools = [
 
   // ====================================================================
   // TOOL 3: Universal "Delete" Tool
+  // The AI's tool for removing data.
   // ====================================================================
   {
     name: "deleteRecord",
@@ -80,13 +72,14 @@ export const agentTools = [
       properties: {
         recordType: {
           type: "STRING",
-          description: "סוג הרשומה למחיקה, למשל 'course', 'courseMeeting', 'studentEvent'.",
+          description: "סוג הרשומה למחיקה, למשל 'course', 'studentEvent'.",
         },
         recordId: {
           type: "STRING",
-          description: "ה-ID הייחודי של הפריט למחיקה. זהו הערך של המפתח הראשי של אותה ישות.",
+          description: "ה-ID הייחודי של הפריט למחיקה.",
         },
-        parentId: { type: "STRING", description: "עבור ישויות מקוננות, זהו ה-ID של פריט האב. לדוגמה, עבור סמסטר, זהו ה-yearCode."}
+        // parentId is kept for nested entities like semesters/rooms.
+        parentId: { type: "STRING", description: "עבור ישויות מקוננות, זהו ה-ID של פריט האב (למשל, yearCode)."}
       },
       required: ["recordType", "recordId"],
     },

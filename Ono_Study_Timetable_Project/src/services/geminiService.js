@@ -3,11 +3,13 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 
 // --- Configuration ---
+
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 if (!API_KEY) {
     throw new Error("CRITICAL ERROR: VITE_GEMINI_API_KEY is not defined in your .env file.");
 }
-export const genAI = new GoogleGenerativeAI(API_KEY); // Export genAI to be used in context
+// Exporting genAI is a clean way for other parts of the app (like context) to access the core instance if needed for initialization.
+export const genAI = new GoogleGenerativeAI(API_KEY); 
 
 const modelConfig = {
     model: "gemini-1.5-flash-latest",
@@ -23,12 +25,13 @@ const safetySettings = [
 /**
  * A stateless function that sends a request to the Gemini API.
  * It creates a new chat session from the provided history for each call.
+ * This is the single point of communication with the Google AI API.
  *
- * @param {Array<Object>} history - The conversation history.
+ * @param {Array<Object>} history - The conversation history, formatted for the API.
  * @param {string | object} message - The new message or function response to send.
- * @param {Array} tools - The AI's toolbox.
+ * @param {Array} tools - The AI's toolbox (function declarations).
  * @param {string} systemInstruction - The AI's personality and rules.
- * @returns {Promise<Object>} A promise resolving to the AI's structured response.
+ * @returns {Promise<Object>} A promise resolving to the AI's latest structured response.
  */
 export const runAIAgent = async (history, message, tools, systemInstruction) => {
     console.log(`[geminiService] Running agent with history and new message...`);
@@ -41,10 +44,8 @@ export const runAIAgent = async (history, message, tools, systemInstruction) => 
             safetySettings,
         });
 
-        // Start a new chat session with the full history for context.
         const chat = model.startChat({ history });
 
-        // Send the new message.
         const result = await chat.sendMessage(message);
         const response = result.response;
         
@@ -59,7 +60,6 @@ export const runAIAgent = async (history, message, tools, systemInstruction) => 
             functionCall: (functionCalls && functionCalls.length > 0) ? functionCalls[0] : null,
         };
 
-        // Return only the response. The caller manages the state.
         return { response: agentResponse };
 
     } catch (error) {

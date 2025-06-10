@@ -19,7 +19,7 @@ export const useAgent = () => {
 const getSystemInstruction = (user) => {
     const today = new Date().toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const userName = user ? `${user.firstName} ${user.lastName}` : 'אורח';
-    const userId = user ? user.uid || user.username : 'N/A'; // Use uid or username as the identifier
+    const userId = user ? user.uid || user.username : 'N/A';
 
     return `
 הנחיית מערכת: אתה "יועץ לוח זמנים", סוכן AI מומחה וידידותי למערכת Timetable Pro.
@@ -40,7 +40,7 @@ const getSystemInstruction = (user) => {
 };
 
 export const AgentProvider = ({ children }) => {
-    const { currentUser } = useAuth(); // Get user from AuthContext
+    const { currentUser } = useAuth();
     const [isAgentOpen, setIsAgentOpen] = useState(false);
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -77,22 +77,20 @@ export const AgentProvider = ({ children }) => {
         }
         
         try {
-            // Prepare history for the API.
-            // Exclude our hardcoded greeting and format roles and parts correctly.
+            // Prepare history for the API, excluding our hardcoded greeting.
             const history = currentMessages.slice(1).map(msg => {
                 if (msg.role === 'agent' && msg.functionCall) {
                     return { role: 'model', parts: [{ functionCall: msg.functionCall }] };
                 }
-                // Handle the function response from AIFunctionHandler
-                if (msg.role === 'user' && Array.isArray(msg.text)) { 
-                    return { role: 'user', parts: msg.text };
+                // --- THIS IS THE CORRECT WAY TO FORMAT A FUNCTION RESPONSE FOR THE HISTORY ---
+                if (msg.role === 'user' && Array.isArray(messageContent)) { 
+                    // This 'messageContent' is the function response from the handler
+                    return { role: 'user', parts: messageContent };
                 }
                 return { role: msg.role === 'agent' ? 'model' : 'user', parts: [{ text: msg.text }] };
             });
             
             const messageToSend = typeof messageContent === 'string' ? messageContent : messageContent;
-
-            // Generate the dynamic system instruction with the most up-to-date context.
             const systemInstruction = getSystemInstruction(currentUser);
 
             // Call the stateless service function.
