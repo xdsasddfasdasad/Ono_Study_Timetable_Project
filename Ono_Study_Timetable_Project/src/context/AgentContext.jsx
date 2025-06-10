@@ -25,6 +25,34 @@ const getSystemInstruction = (user) => {
 `;
 };
 
+// פונקציית עזר להמרת מערך ההודעות הפנימי שלנו לפורמט של Gemini
+const formatHistoryForAPI = (messages) => {
+    // מתחילים מההודעה השנייה, כי הראשונה היא הודעת פתיחה של המערכת
+    return messages.slice(1).map(msg => {
+        switch (msg.role) {
+            case 'user':
+                return { role: 'user', parts: [{ text: msg.text }] };
+            case 'agent':
+                if (msg.functionCall) {
+                    return { role: 'model', parts: [{ functionCall: msg.functionCall }] };
+                }
+                return { role: 'model', parts: [{ text: msg.text }] };
+            case 'function':
+                return {
+                    role: 'function',
+                    parts: [{
+                        functionResponse: {
+                            name: msg.name,
+                            response: msg.response,
+                        }
+                    }]
+                };
+            default:
+                return null;
+        }
+    }).filter(Boolean); // מסננים החוצה הודעות לא תקינות
+};
+
 export const AgentProvider = ({ children }) => {
     const { currentUser } = useAuth();
     const [isAgentOpen, setIsAgentOpen] = useState(false);
@@ -39,53 +67,27 @@ export const AgentProvider = ({ children }) => {
         }
     }, [isAgentOpen, messages.length, currentUser]);
 
-    const sendMessage = useCallback(async (messageContent, isFunctionResponse = false) => {
+    const sendMessage = useCallback(async (messagePayload) => {
         if (isLoading) return;
-        if (typeof messageContent === 'string' && !messageContent.trim()) return;
 
         setIsLoading(true);
-        let currentMessages = messages;
-
-        // Add the new part to the conversation history
-        if (isFunctionResponse) {
-            // This is the result from our AIFunctionHandler
-            const functionMessage = { role: 'function', response: messageContent };
-            currentMessages = [...messages, functionMessage];
-        } else {
-            // This is a new message from the user
-            const userMessage = { role: 'user', text: messageContent };
-            currentMessages = [...messages, userMessage];
-        }
-        setMessages(currentMessages);
+        
+        // מוסיפים את ההודעה החדשה (מהמשתמש או מתוצאת פונקציה) להיסטוריה
+        const updatedMessages = [...messages, messagePayload];
+        setMessages(updatedMessages);
         
         try {
-            const history = currentMessages.slice(1).map(msg => {
-                if (msg.role === 'agent' && msg.functionCall) {
-                    return { role: 'model', parts: [{ functionCall: msg.functionCall }] };
-                }
-                if (msg.role === 'function') {
-                    // This is the crucial part that fixes the error
-                    return { role: 'function', parts: [{ functionResponse: msg.response }] };
-                }
-                return { role: msg.role === 'agent' ? 'model' : 'user', parts: [{ text: msg.text }] };
-            });
+            // ממירים את כל ההיסטוריה לפורמט הנדרש
+            const historyForAPI = formatHistoryForAPI(updatedMessages);
             
-            // The service expects only the *newest* part of the conversation
-            const latestMessage = currentMessages[currentMessages.length - 1];
-            let messageToSend = [];
-            if (latestMessage.role === 'user') {
-                messageToSend = latestMessage.text;
-            } else if (latestMessage.role === 'function') {
-                messageToSend.push({ functionResponse: latestMessage.response });
-            }
-
+            // שולחים את ההיסטוריה המלאה לסרוויס
             const { response: agentResponse } = await runAIAgent(
-                history,
-                messageToSend,
+                historyForAPI,
                 agentTools,
                 getSystemInstruction(currentUser)
             );
             
+            // מוסיפים את תגובת הסוכן להיסטוריה
             setMessages(prev => [...prev, agentResponse]);
 
         } catch (error) {

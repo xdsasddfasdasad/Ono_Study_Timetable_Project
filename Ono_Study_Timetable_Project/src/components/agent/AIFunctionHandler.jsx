@@ -4,15 +4,17 @@ import { useEffect, useCallback } from 'react';
 import { useAgent } from '../../context/AgentContext';
 import { useAuth } from '../../context/AuthContext';
 import { useEvents } from '../../context/EventsContext';
-import { formMappings } from '../../utils/formMappings';
+import { formMappings } from '../../utils/formMappings'; // נניח שיש לך קובץ כזה
 import { handleSaveOrUpdateRecord, handleDeleteEntity } from '../../handlers/formHandlers';
+import { fetchCollectionWithQuery, fetchCollection } from '../../firebase/firestoreService';
+import { where } from 'firebase/firestore';
 import { parseDate } from 'chrono-node';
-import { isSameDay } from 'date-fns';
+import { startOfDay, endOfDay } from 'date-fns';
 
 export default function AIFunctionHandler() {
-    const { messages, sendMessage } = useAgent();
+    const { messages, sendMessage, isLoading } = useAgent();
     const { currentUser } = useAuth();
-    const { refreshEvents, allVisibleEvents } = useEvents();
+    const { refreshEvents } = useEvents();
 
     const executeFunctionCall = useCallback(async (functionCall) => {
         const { name: functionName, args: functionArgs } = functionCall;
@@ -23,31 +25,42 @@ export default function AIFunctionHandler() {
         try {
             switch (functionName) {
                 case 'findRecords': {
-                    const { recordType, filters } = functionArgs || {};
-                    const { searchText, dateQuery } = filters || {};
-                    let sourceData = allVisibleEvents;
+                    const { recordType, searchText, dateQuery } = functionArgs;
+                    const collectionName = formMappings[recordType]?.collectionName;
+                    if (!collectionName) throw new Error(`Collection for '${recordType}' not found.`);
 
-                    if (recordType) {
-                        sourceData = sourceData.filter(event => event.extendedProps?.type === recordType);
-                    }
+                    const queryConstraints = [];
+                    
+                    // טיפול בשאילתת תאריך
                     if (dateQuery) {
                         const parsedDate = parseDate(dateQuery, new Date(), { forwardDate: true });
                         if (parsedDate) {
-                            sourceData = sourceData.filter(event => event.start && isSameDay(event.start, parsedDate));
+                            queryConstraints.push(where("startDate", ">=", startOfDay(parsedDate)));
+                            queryConstraints.push(where("startDate", "<=", endOfDay(parsedDate)));
                         }
                     }
-                    if (searchText) {
-                        sourceData = sourceData.filter(event => event.title.toLowerCase().includes(searchText.toLowerCase()));
+                    
+                    // טיפול בחיפוש טקסט (מוגבל ב-Firestore, נדרשת אסטרטגיה מתקדמת יותר כמו Algolia לחיפוש מלא)
+                    // כרגע נשתמש בסינון בצד הלקוח אחרי קבלת התוצאות
+                    let results;
+                    if (queryConstraints.length > 0) {
+                        results = await fetchCollectionWithQuery(collectionName, queryConstraints);
+                    } else {
+                        results = await fetchCollection(collectionName);
                     }
                     
-                    const formattedResults = sourceData.map(event => ({
-                        id: event.id,
-                        title: event.title,
-                        start: event.start.toISOString(),
-                        end: event.end ? event.end.toISOString() : event.start.toISOString(),
-                        type: event.extendedProps?.type,
-                    }));
-                    functionResultPayload = { success: true, data: formattedResults };
+                    if (searchText) {
+                        const lowerCaseSearch = searchText.toLowerCase();
+                        // נסנן לפי שדה השם הרלוונטי לכל סוג רשומה
+                        results = results.filter(item => 
+                           (item.eventName && item.eventName.toLowerCase().includes(lowerCaseSearch)) ||
+                           (item.courseName && item.courseName.toLowerCase().includes(lowerCaseSearch)) ||
+                           (item.holidayName && item.holidayName.toLowerCase().includes(lowerCaseSearch)) ||
+                           (item.name && item.name.toLowerCase().includes(lowerCaseSearch))
+                        );
+                    }
+
+                    functionResultPayload = { success: true, count: results.length, data: results.slice(0, 10) }; // החזרת 10 תוצאות ראשונות למניעת הצפה
                     break;
                 }
                 case 'saveOrUpdateRecord': {
@@ -65,8 +78,8 @@ export default function AIFunctionHandler() {
                     const result = await handleSaveOrUpdateRecord(collectionName, { ...dataToSave, id }, mode, { recordType, editingId: id });
                     if (!result.success) throw new Error(result.message);
                     
-                    refreshEvents();
-                    functionResultPayload = { success: true, message: "הפעולה בוצעה בהצלחה." };
+                    await refreshEvents();
+                    functionResultPayload = { success: true, message: "הפעולה בוצעה בהצלחה.", recordId: result.id };
                     break;
                 }
                 case 'deleteRecord': {
@@ -78,7 +91,7 @@ export default function AIFunctionHandler() {
                     const result = await handleDeleteEntity(collectionName, recordId, { recordType, parentDocId: parentId });
                     if (!result.success) throw new Error(result.message);
                     
-                    refreshEvents();
+                    await refreshEvents();
                     functionResultPayload = { success: true, message: "הפריט נמחק." };
                     break;
                 }
@@ -86,22 +99,26 @@ export default function AIFunctionHandler() {
                     throw new Error(`Unknown function: "${functionName}"`);
             }
         } catch (error) {
+            console.error(`[AIFunctionHandler] Error executing ${functionName}:`, error);
             functionResultPayload = { success: false, error: error.message };
         }
 
-        // --- THE CRITICAL FIX IS HERE ---
-        // We now call sendMessage with the result and a flag indicating it's a function response.
-        sendMessage({ name: functionName, response: functionResultPayload }, true);
+        // שולחים את התוצאה בחזרה ל-Context כדי שימשיך את השיחה עם ה-AI
+        sendMessage({
+            role: 'function',
+            name: functionName,
+            response: functionResultPayload
+        });
 
-    }, [currentUser, allVisibleEvents, refreshEvents, sendMessage]);
+    }, [currentUser, refreshEvents, sendMessage]);
 
     useEffect(() => {
         const lastMessage = messages[messages.length - 1];
-        if (lastMessage?.role === 'agent' && lastMessage.functionCall && !lastMessage.isHandled) {
-            lastMessage.isHandled = true;
+        // בודקים אם ההודעה האחרונה היא קריאה לפונקציה, ואם אנחנו לא כבר בתהליך טעינה
+        if (lastMessage?.role === 'agent' && lastMessage.functionCall && !isLoading) {
             executeFunctionCall(lastMessage.functionCall);
         }
-    }, [messages, executeFunctionCall]);
+    }, [messages, isLoading, executeFunctionCall]);
 
-    return null;
+    return null; // רכיב זה אינו מרנדר כלום
 }
