@@ -143,23 +143,6 @@ export default function LoginPage() {
           <Button variant="contained" fullWidth type="submit" disabled={isLoading || isSeedButtonLoading} sx={{ mt: 2, mb: 1 }} > {isLoading ? <CircularProgress size={24} color="inherit" /> : "Sign In"} </Button>
         </Stack>
       </Paper>
-
-      {/* Seed Button (Visible only in development environment) */}
-      {process.env.NODE_ENV === 'development' && (
-        <Box sx={{ mt: 4, p: 2, border: '1px dashed', borderColor: 'divider', borderRadius: 1, textAlign: 'center', width: '100%', maxWidth: 420 }}>
-          <Typography variant="overline" display="block" color="text.secondary" gutterBottom> Developer Tools </Typography>
-          <Button
-            variant="outlined"
-            color="warning"
-            onClick={handleSeedDatabase}
-            disabled={isSeedButtonLoading || isLoading || authIsLoading} // Disable if login/auth/seed in progress
-            startIcon={isSeedButtonLoading ? <CircularProgress size={18} color="inherit" /> : null}
-          >
-            {isSeedButtonLoading ? "Seeding Database..." : "Initialize/Seed Database"}
-          </Button>
-          <Typography variant="caption" display="block" sx={{mt:1, fontSize: '0.7rem'}}> (Run once to populate Firestore. Check console.) </Typography>
-        </Box>
-      )}
     </Box>
   );
 }
