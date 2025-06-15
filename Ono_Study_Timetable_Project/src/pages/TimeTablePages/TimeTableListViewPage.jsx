@@ -59,25 +59,50 @@ export default function TimeTableListViewPage() {
         endDate: '', courseCode: '', weekDay: '', yearCode: '', semesterCode: '',
     });
 
+    // ✨ --- תיקון 2: הוספת לוגיקה לטיפול בשינויי פילטרים --- ✨
     const handleFilterChange = (e) => {
         const { name, value } = e.target;
-        if (name === 'yearCode') {
-            setFilters(prev => ({ ...prev, yearCode: value, semesterCode: '' }));
-        } else {
-            setFilters(prev => ({ ...prev, [name]: value }));
-        }
+    
+        setFilters(prev => {
+            const newFilters = { ...prev, [name]: value };
+    
+            // אם משתמש משנה את שנת הלימוד, נאפס את הסמסטר
+            if (name === 'yearCode') {
+                newFilters.semesterCode = '';
+            }
+    
+            // אם משתמש בוחר קורס, נשנה את סוג האירוע ל'מפגש קורס'
+            if (name === 'courseCode') {
+                if (value) { // אם נבחר קורס ספציפי
+                    newFilters.eventTypes = ['courseMeeting'];
+                } else { // אם הבחירה בוטלה ("כל הקורסים")
+                    newFilters.eventTypes = ALL_EVENT_TYPES; // נחזיר את כל סוגי האירועים לבחירה
+                }
+            }
+    
+            return newFilters;
+        });
     };
 
     const handleEventTypeFilterChange = (event) => {
         const { value } = event.target;
+        // כשבוחרים קורס, אנחנו לא רוצים ששינוי ידני של סוגי האירועים יאפס את בחירת הקורס
+        // לכן, נאפס את בחירת הקורס רק אם המשתמש משנה את סוג האירוע באופן ידני למשהו שאינו קורס
+        const newEventTypes = typeof value === 'string' ? value.split(',') : value;
+
         if (value.includes('__select_all__')) {
             if (filters.eventTypes.length === ALL_EVENT_TYPES.length) {
-                setFilters(prev => ({ ...prev, eventTypes: [] }));
+                setFilters(prev => ({ ...prev, eventTypes: [], courseCode: '' }));
             } else {
                 setFilters(prev => ({ ...prev, eventTypes: ALL_EVENT_TYPES }));
             }
         } else {
-            setFilters(prev => ({ ...prev, eventTypes: typeof value === 'string' ? value.split(',') : value }));
+             setFilters(prev => ({ 
+                ...prev, 
+                eventTypes: newEventTypes,
+                // אם 'courseMeeting' לא נבחר, נקה את פילטר הקורס
+                courseCode: newEventTypes.includes('courseMeeting') ? prev.courseCode : ''
+            }));
         }
     };
     
@@ -103,8 +128,8 @@ export default function TimeTableListViewPage() {
                 dateRangeFilter = { start: parseISO(year.startDate), end: parseISO(year.endDate) };
             }
         } else {
-            const start = filters.startDate ? parseISO(filters.startDate) : null;
-            const end = filters.endDate ? parseISO(filters.endDate) : null;
+            const start = filters.startDate ? toValidDate(filters.startDate) : null;
+            const end = filters.endDate ? toValidDate(filters.endDate) : null;
             if (start || end) {
                 dateRangeFilter = { start: start || new Date(0), end: end || new Date(8640000000000000) };
             }
@@ -114,7 +139,21 @@ export default function TimeTableListViewPage() {
             const props = event.extendedProps;
             const eventStart = toValidDate(event.start);
             if (!eventStart) return false;
-            if (dateRangeFilter && !isWithinInterval(eventStart, dateRangeFilter)) return false;
+            
+            // תוקן: הלוגיקה של טווח התאריכים נשארת כפי שהיא, אך כעת היא תעבוד עם ערכים עדכניים מהמצב
+            if (dateRangeFilter) {
+                 // הוספת בדיקה כדי לוודא שהתאריך תקין לפני השימוש ב-isWithinInterval
+                const validStart = isValid(dateRangeFilter.start) ? dateRangeFilter.start : null;
+                const validEnd = isValid(dateRangeFilter.end) ? dateRangeFilter.end : null;
+                if (validStart && validEnd && !isWithinInterval(eventStart, {start: validStart, end: validEnd})) {
+                     return false;
+                } else if (validStart && !validEnd && compareAsc(eventStart, validStart) < 0) {
+                     return false;
+                } else if (!validStart && validEnd && compareAsc(eventStart, validEnd) > 0) {
+                     return false;
+                }
+            }
+            
             if (filters.eventTypes.length > 0) {
                 if (!filters.eventTypes.includes(props.type)) return false;
             } else {
@@ -145,7 +184,6 @@ export default function TimeTableListViewPage() {
     const handleOpenAddModal = useCallback(() => { setSelectedEvent({ studentId: currentUser?.uid }); setIsModalOpen(true); }, [currentUser]);
     const handleOpenEditModal = useCallback((props) => { setSelectedEvent(props); setIsModalOpen(true); }, []);
 
-    // ✨ --- לוגיקה מתוקנת ומשופרת לשמירת אירוע אישי --- ✨
     const handleSavePersonalEvent = useCallback(async (formDataFromModal) => {
         if (!currentUser?.uid) {
             setModalError("You must be logged in to save an event.");
@@ -156,7 +194,6 @@ export default function TimeTableListViewPage() {
         let dataToSave = { ...formDataFromModal, studentId: currentUser.uid };
         const mode = dataToSave.eventCode ? 'edit' : 'add';
         
-        // אם זה אירוע חדש, נייצר לו מזהה ייחודי
         if (mode === 'add') {
             dataToSave.eventCode = `SE-${currentUser.uid}-${Date.now()}`;
         }
@@ -208,8 +245,13 @@ export default function TimeTableListViewPage() {
                     <Grid item xs={6} sm={4} md={3} lg={2}><FormControl size="small" fullWidth><InputLabel>Year</InputLabel><Select name="yearCode" value={filters.yearCode} label="Year" onChange={handleFilterChange}><MenuItem value=""><em>All Years</em></MenuItem>{years.map(y => (<MenuItem key={y.yearCode} value={y.yearCode}>{`Year ${y.yearNumber}`}</MenuItem>))}</Select></FormControl></Grid>
                     <Grid item xs={6} sm={4} md={3} lg={2}><FormControl size="small" fullWidth disabled={!filters.yearCode}><InputLabel>Semester</InputLabel><Select name="semesterCode" value={filters.semesterCode} label="Semester" onChange={handleFilterChange}><MenuItem value=""><em>All Semesters</em></MenuItem>{availableSemesters.map(s => (<MenuItem key={s.semesterCode} value={s.semesterCode}>{`Sem. ${s.semesterNumber}`}</MenuItem>))}</Select></FormControl></Grid>
                     <Grid item xs={6} sm={4} md={3} lg={2}><FormControl size="small" fullWidth><InputLabel>Day</InputLabel><Select name="weekDay" value={filters.weekDay} label="Day" onChange={handleFilterChange}><MenuItem value=""><em>Any Day</em></MenuItem>{WEEK_DAYS.map((day, index) => (<MenuItem key={index} value={index}>{day}</MenuItem>))}</Select></FormControl></Grid>
-                    <Grid item xs={12} sm={6} md={3} lg={2}><TextField name="startDate" label="From" type="date" size="small" fullWidth InputLabelProps={{ shrink: true }} value={filters.startDate} disabled={!!filters.yearCode} /></Grid>
-                    <Grid item xs={12} sm={6} md={3} lg={2}><TextField name="endDate" label="To" type="date" size="small" fullWidth InputLabelProps={{ shrink: true }} value={filters.endDate} disabled={!!filters.yearCode} /></Grid>
+                    {/* ✨ --- תיקון 1: הוספת onChange לשדות התאריך --- ✨ */}
+                    <Grid item xs={12} sm={6} md={3} lg={2}>
+                        <TextField name="startDate" label="From" type="date" size="small" fullWidth InputLabelProps={{ shrink: true }} value={filters.startDate} onChange={handleFilterChange} disabled={!!filters.yearCode || !!filters.semesterCode} />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3} lg={2}>
+                        <TextField name="endDate" label="To" type="date" size="small" fullWidth InputLabelProps={{ shrink: true }} value={filters.endDate} onChange={handleFilterChange} disabled={!!filters.yearCode || !!filters.semesterCode} />
+                    </Grid>
                 </Grid>
             </Paper>
 
