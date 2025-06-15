@@ -5,10 +5,10 @@ import {
     createUserWithEmailAndPassword,
     signOut,
     onAuthStateChanged,
-    updateEmail,          // ✅ For changing user's email in Auth
-    updatePassword,       // ✅ For changing user's password in Auth
-    reauthenticateWithCredential, // ✅ For re-authentication if needed
-    EmailAuthProvider     // ✅ To create credential for re-authentication
+    updateEmail,
+    updatePassword,
+    reauthenticateWithCredential,
+    EmailAuthProvider
 } from "firebase/auth";
 import { app } from './firebaseConfig'; // Firebase app instance
 import { setDocument, fetchDocumentById, updateDocument as updateFirestoreDocument } from './firestoreService'; // Firestore helpers
@@ -23,10 +23,14 @@ export const signInUser = async (email, password) => {
 };
 
 // --- Sign Up (Creates Auth user AND Firestore profile) ---
-export const signUpUser = async (email, password, firstName, lastName, username, studentIdCard, phone, courseCodes, eventCodes) => {
-    if (!email || !password || !firstName || !lastName || !username || !studentIdCard) {
+// ✅ This is the single, correct version of the function.
+// It accepts one object for better readability and scalability.
+export const signUpUser = async (studentData) => {
+    const { email, password, ...profileData } = studentData;
+    if (!email || !password || !profileData.firstName || !profileData.lastName || !profileData.username || !profileData.studentIdCard) {
         throw new Error("Required fields missing for sign up.");
     }
+
     console.log(`[AuthService:SignUp] Attempting to sign up ${email}`);
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -34,18 +38,23 @@ export const signUpUser = async (email, password, firstName, lastName, username,
         const generatedUID = user.uid;
         console.log(`[AuthService:SignUp] Auth user created with UID: ${generatedUID}`);
 
+        // Prepare the full profile document for Firestore
         const userProfileData = {
-            uid: generatedUID, id: generatedUID, email: user.email,
-            firstName, lastName, username, studentIdCard,
-            phone: phone || "", courseCodes: courseCodes || [], eventCodes: eventCodes || [],
+            ...profileData, // Contains firstName, lastName, username, studentIdCard, phone, etc.
+            uid: generatedUID,
+            id: generatedUID, // Using UID as the document ID is a common and good practice
+            email: user.email,
             createdAt: new Date().toISOString(),
-            // role: studentIdCard === '000000001' ? 'admin' : 'student' // Example
         };
+        
+        // Use setDocument to create the document with a specific ID (the UID)
         await setDocument('students', generatedUID, userProfileData);
         console.log(`[AuthService:SignUp] Firestore profile created for UID: ${generatedUID}`);
+        
         return userCredential;
     } catch (error) {
         console.error("[AuthService:SignUp] Error:", error.code, error.message);
+        // Let the caller handle the error and display a user-friendly message
         throw error;
     }
 };
@@ -57,7 +66,10 @@ export const signOutUser = async () => {
         await signOut(auth);
         console.log("[AuthService:SignOut] User signed out successfully.");
         return true;
-    } catch (error) { console.error("[AuthService:SignOut] Error:", error); throw error; }
+    } catch (error) { 
+        console.error("[AuthService:SignOut] Error:", error); 
+        throw error; 
+    }
 };
 
 // --- Auth State Listener ---
@@ -72,8 +84,9 @@ export const getUserProfile = async (userId) => {
     return fetchDocumentById('students', userId);
 };
 
-// --- ✅ Update User Email in Firebase Auth and Firestore ---
+// --- Update User Email in Firebase Auth and Firestore ---
 export const updateUserAuthEmail = async (newEmail) => {
+    // Note: This operation requires the user to be recently logged in.
     if (!auth.currentUser) throw new Error("No user currently signed in to update email.");
     if (!newEmail || !/^\S+@\S+\.\S+$/.test(newEmail)) throw new Error("Invalid new email format.");
 
@@ -94,8 +107,10 @@ export const updateUserAuthEmail = async (newEmail) => {
     }
 };
 
-// --- ✅ Update User Password in Firebase Auth ---
+// --- Update User Password in Firebase Auth ---
 export const updateUserAuthPassword = async (newPassword) => {
+    // Note: This operation requires the user to be recently logged in.
+    // Also, this only works for the CURRENTLY LOGGED IN user. An admin cannot change another user's password this way.
     if (!auth.currentUser) throw new Error("No user currently signed in to update password.");
     if (!newPassword || newPassword.length < 6) throw new Error("New password must be at least 6 characters.");
 
@@ -103,7 +118,7 @@ export const updateUserAuthPassword = async (newPassword) => {
     try {
         await updatePassword(auth.currentUser, newPassword);
         console.log("[AuthService:UpdatePassword] Password updated successfully in Firebase Auth.");
-        // Password hash is managed by Firebase Auth; DO NOT store plain password or new hash in Firestore.
+        // Password hash is managed by Firebase Auth; DO NOT store plain password in Firestore.
         return true;
     } catch (error) {
         console.error("[AuthService:UpdatePassword] Error updating password:", error.code, error.message);
@@ -114,9 +129,8 @@ export const updateUserAuthPassword = async (newPassword) => {
     }
 };
 
-// --- ✅ Re-authenticate Current User (Example) ---
-// This function would typically be called before sensitive operations like email/password change.
-// It requires the user to provide their CURRENT password.
+// --- Re-authenticate Current User ---
+// This might be needed before calling updateEmail or updatePassword if the user hasn't logged in recently.
 export const reauthenticateUser = async (currentPassword) => {
     if (!auth.currentUser) throw new Error("No user to re-authenticate.");
     if (!currentPassword) throw new Error("Current password is required for re-authentication.");

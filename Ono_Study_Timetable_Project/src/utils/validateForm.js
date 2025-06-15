@@ -1,67 +1,81 @@
 // src/utils/validateForm.js
 
-// Import Firestore query function
-import { fetchDocumentsByQuery } from '../firebase/firestoreService'; // Adjust path if needed
+// ✅ Import Firestore query function
+import { fetchDocumentsByQuery } from '../firebase/firestoreService';
 
-// isDuplicate helper is NO LONGER NEEDED for Firestore uniqueness checks via query
-
-// --- ASYNC Validation Functions (Updated for Firestore Queries) ---
-
+/**
+ * Validates the student form data against business rules and database uniqueness.
+ * @param {object} formData - The current state of the form.
+ * @param {object} options - Options like editingId to skip self-comparison.
+ * @returns {Promise<object>} An object containing validation errors.
+ */
 export const validateStudentForm = async (formData, options = {}) => {
-    console.log("[validateStudentForm:Async] Validating:", formData);
     const errors = {};
-    const editingId = options.editingId; // Student's Firestore document ID (which is their 'id' field)
+    const editingId = options.editingId; // The student's Firestore document ID (UID)
+    const isEditMode = !!editingId;
 
-    // ID Validation (Assuming ID is user-provided and should be unique)
-    if (!formData.id?.trim()) { errors.id = "Student ID is required."; }
-    else {
+    // --- Student ID Card (ת.ז) Validation ---
+    // ✅ CHANGED: Logic now targets studentIdCard instead of a generic 'id' field
+    if (!formData.studentIdCard?.trim()) {
+        errors.studentIdCard = "שדה ת.ז. הוא חובה.";
+    } else if (!/^\d{9}$/.test(formData.studentIdCard.trim())) {
+        errors.studentIdCard = "ת.ז. חייבת להכיל 9 ספרות בדיוק.";
+    } else if (!isEditMode) { // ✅ Check for uniqueness only on 'add' mode
         try {
-            const existingById = await fetchDocumentsByQuery('students', 'id', '==', formData.id.trim());
-            if (existingById.some(doc => doc.id !== editingId)) { errors.id = "Student ID already exists."; }
-        } catch (e) { console.error("ID check failed:", e); errors.id = "Could not verify ID uniqueness."; }
-    }
-
-    // Name Validation (Synchronous)
-    if (!formData.firstName?.trim()) errors.firstName = "First name is required.";
-    if (!formData.lastName?.trim()) errors.lastName = "Last name is required.";
-
-    // Email Validation
-    if (!formData.email?.trim()) { errors.email = "Email is required."; }
-    else if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) { errors.email = "Invalid email format."; }
-    else {
-        try {
-            const existingByEmail = await fetchDocumentsByQuery('students', 'email', '==', formData.email.trim());
-            if (existingByEmail.some(doc => doc.id !== editingId)) { errors.email = "Email address already in use."; }
-        } catch (e) { console.error("Email check failed:", e); errors.email = "Could not verify email uniqueness."; }
-    }
-
-    // Username Validation
-    if (!formData.username?.trim()) { errors.username = "Username is required."; }
-    else if (formData.username.trim().length < 6) { errors.username = "Username must be at least 6 characters."; }
-    else {
-        try {
-            const existingByUsername = await fetchDocumentsByQuery('students', 'username', '==', formData.username.trim());
-            if (existingByUsername.some(doc => doc.id !== editingId)) { errors.username = "Username already exists."; }
-        } catch (e) { console.error("Username check failed:", e); errors.username = "Could not verify username uniqueness."; }
-    }
-
-    // Phone Validation (Synchronous)
-    if (formData.phone && formData.phone.trim() && !/^\d{9,10}$/.test(formData.phone.trim())) { // Example: 9-10 digits
-        errors.phone = "Invalid phone number format.";
-    }
-
-    // Password Validation (Synchronous - checks password and confirmPassword if needed)
-    if (!options?.skipPassword) {
-        if (!formData.password) { errors.password = "Password is required."; }
-        else if (formData.password.length < 6) { errors.password = "Password must be at least 6 characters."; }
-        // Check confirmation only if password itself is valid
-        if (!errors.password) {
-            if (!formData.confirmPassword) { errors.confirmPassword = "Please confirm your password."; }
-            else if (formData.password !== formData.confirmPassword) { errors.confirmPassword = "Passwords do not match."; }
+            const existingStudent = await fetchDocumentsByQuery('students', 'studentIdCard', '==', formData.studentIdCard.trim());
+            if (existingStudent.length > 0) {
+                errors.studentIdCard = "מספר ת.ז. זה כבר קיים במערכת.";
+            }
+        } catch (e) {
+            console.error("Student ID Card check failed:", e);
+            errors.studentIdCard = "שגיאה בבדיקת ייחודיות של ת.ז.";
         }
     }
 
-    console.log("[validateStudentForm:Async] Errors:", errors);
+    // --- Basic Information Validation (Synchronous) ---
+    if (!formData.firstName?.trim()) errors.firstName = "שם פרטי הוא חובה.";
+    if (!formData.lastName?.trim()) errors.lastName = "שם משפחה הוא חובה.";
+    if (!formData.username?.trim()) errors.username = "שם משתמש הוא חובה.";
+
+    // --- Email Validation (Async) ---
+    if (!formData.email?.trim()) {
+        errors.email = "אימייל הוא חובה.";
+    } else if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) {
+        errors.email = "פורמט אימייל לא תקין.";
+    } else {
+        try {
+            const existingByEmail = await fetchDocumentsByQuery('students', 'email', '==', formData.email.trim());
+            // Check if an existing document with this email belongs to a *different* user
+            if (existingByEmail.some(doc => doc.id !== editingId)) {
+                errors.email = "כתובת אימייל זו כבר בשימוש.";
+            }
+        } catch (e) {
+            console.error("Email check failed:", e);
+            errors.email = "שגיאה בבדיקת ייחודיות של אימייל.";
+        }
+    }
+    
+    // --- Password Validation ---
+    const isPasswordFilled = !!formData.password?.trim();
+    
+    // ✅ In 'add' mode, password is required. In 'edit' mode, it's optional.
+    if (!isEditMode && !isPasswordFilled) {
+        errors.password = "סיסמה היא חובה.";
+    }
+
+    // ✅ If a password is provided (in either mode), it must be valid.
+    if (isPasswordFilled) {
+        if (formData.password.length < 6) {
+            errors.password = "סיסמה חייבת להכיל לפחות 6 תווים.";
+        } else {
+            // ✅ Validate confirmation only if password field itself is valid and filled
+            if (formData.password !== formData.confirmPassword) {
+                errors.confirmPassword = "הסיסמאות אינן תואמות.";
+            }
+        }
+    }
+    
+    console.log("[validateStudentForm:Async] Validation Errors:", errors);
     return errors;
 };
 
