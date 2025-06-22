@@ -1,64 +1,37 @@
 // src/services/geminiService.js
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { tools } from '../config/aiTools'; // ייבוא הכלים שהגדרנו
 
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+const API_KEY = "YOUR_GEMINI_API_KEY"; // אחסן את זה במשתני סביבה!
+const genAI = new GoogleGenerativeAI(API_KEY);
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-if (!API_KEY) {
-    throw new Error("CRITICAL ERROR: VITE_GEMINI_API_KEY is not defined in your .env file.");
-}
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash", // מודל מומלץ שיודע להשתמש בכלים
+  tools: tools,
+});
 
-export const genAI = new GoogleGenerativeAI(API_KEY); 
-
-const modelConfig = {
-    model: "gemini-1.5-flash-latest",
+export const startChat = () => {
+    return model.startChat();
 };
 
-const safetySettings = [
-    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-    // ... other settings
-];
+export const sendMessageToAI = async (chat, message, functionHandler) => {
+    console.log("Sending message to AI:", message);
+    const result = await chat.sendMessage(message);
+    const response = result.response;
+    const toolCalls = response.functionCalls;
 
-/**
- * מנהל שיחה עם Gemini API, כולל תמיכה ב-Function Calling.
- * @param {Array<Object>} history - היסטוריית השיחה המלאה, בפורמט הנדרש ע"י ה-API.
- * @param {Array} tools - מערך הכלים שה-AI יכול להשתמש בהם.
- * @param {string} systemInstruction - ההנחיות למודל.
- * @returns {Promise<Object>} אובייקט תגובה מובנה מה-AI.
- */
-export const runAIAgent = async (history, tools, systemInstruction) => {
-    console.log(`[geminiService] Running agent with history...`, history);
-    
-    try {
-        const model = genAI.getGenerativeModel({
-            ...modelConfig,
-            tools: [{ functionDeclarations: tools }],
-            systemInstruction: systemInstruction,
-            safetySettings,
-        });
-
-        // שינוי מרכזי: שולחים את כל ההיסטוריה ישירות ל-startChat
-        const chat = model.startChat({ history });
+    if (toolCalls && toolCalls.length > 0) {
+        console.log("AI responded with tool calls:", toolCalls);
+        // קריאה למטפל הפונקציות שהעברנו
+        const functionResponses = await Promise.all(
+            toolCalls.map(toolCall => functionHandler(toolCall))
+        );
         
-        // sendMessage מקבל מחרוזת ריקה כדי לבקש מהמודל להגיב על סמך ההיסטוריה (שכוללת את הודעת המשתמש האחרונה)
-        const result = await chat.sendMessage(""); 
-        const response = result.response;
-        
-        const functionCalls = response.functionCalls();
-        const textResponse = response.text();
-
-        console.log(`[geminiService] AI Response Details:`, { textResponse, functionCalls });
-        
-        // נבנה את אובייקט התגובה שיוחזר ל-Context
-        const agentResponse = {
-            role: 'agent',
-            text: textResponse,
-            functionCall: (functionCalls && functionCalls.length > 0) ? functionCalls[0] : null,
-        };
-
-        return { response: agentResponse };
-
-    } catch (error) {
-        console.error("[geminiService] An error occurred while communicating with the Google AI API:", error);
-        throw new Error("Failed to get a response from the AI service.");
+        // שליחת התוצאות חזרה ל-AI כדי שינסח תשובה
+        const secondResult = await chat.sendMessage(functionResponses);
+        return secondResult.response.text();
+    } else {
+        // אם אין קריאה לפונקציה, פשוט להחזיר את הטקסט
+        return response.text();
     }
 };

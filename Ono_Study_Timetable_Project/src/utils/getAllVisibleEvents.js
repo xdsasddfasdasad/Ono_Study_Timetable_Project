@@ -1,7 +1,7 @@
 // src/utils/getAllVisibleEvents.js
 
 import { fetchCollection } from '../firebase/firestoreService';
-import { addDays, parseISO, format } from 'date-fns';
+import { addDays, parseISO, format, isWithinInterval, max, min } from 'date-fns';
 
 let lecturersMapCache = null;
 const getLecturersMap = async () => {
@@ -29,9 +29,12 @@ const EVENT_ICONS = {
   yearMarker: '🏁', semesterMarker: '🚩'
 };
 
+// ==============================================================================
+//  *** פונקציה מקורית (ללא שינוי) - עבור FullCalendar ***
+// ==============================================================================
 export const getAllVisibleEvents = async (currentUser = null) => {
   const userUID = currentUser?.uid;
-  console.log(`[getAllVisibleEvents] Fetching all events. Personal events for UID: ${userUID || 'Guest'}`);
+  console.log(`[getAllVisibleEvents] Fetching all events for FullCalendar. Personal events for UID: ${userUID || 'Guest'}`);
 
   try {
     const [
@@ -51,28 +54,23 @@ export const getAllVisibleEvents = async (currentUser = null) => {
     };
 
     (rawMeetings || []).forEach(m => {
-      // ודא שהשדות המודרניים (start/end) קיימים
       if (!m.start) return; 
-      
-      // המר את ה-Timestamp ל-Date object. זה הכרחי עבור FullCalendar.
       const startDate = m.start.toDate ? m.start.toDate() : new Date(m.start);
       const endDate = m.end?.toDate ? m.end.toDate() : (m.end ? new Date(m.end) : null);
-
-      if (isNaN(startDate.getTime())) return; // ודא שהתאריך תקין
+      if (isNaN(startDate.getTime())) return;
 
       addEvent({
         id: m.id,
-        title: `${EVENT_ICONS.courseMeeting} ${m.title || m.courseName}`, // שימוש בשדה title
-        start: startDate, // העבר Date object
-        end: endDate,     // העבר Date object או null
+        title: `${EVENT_ICONS.courseMeeting} ${m.title || m.courseName}`,
+        start: startDate,
+        end: endDate,
         allDay: false,
-        backgroundColor: '#3788d8', // צבע ברירת מחדל של FullCalendar
+        backgroundColor: '#3788d8',
         borderColor: '#3788d8',
         extendedProps: { ...m, type: 'courseMeeting', lecturerName: lecturersMap.get(m.lecturerId) }
       });
     });
 
-    // General Events
     (rawGeneralEvents || []).forEach(e => {
       if (!e.startDate) return;
       addEvent({
@@ -85,7 +83,6 @@ export const getAllVisibleEvents = async (currentUser = null) => {
       });
     });
 
-    // Holidays (Background)
     (rawHolidays || []).forEach(h => {
       if (!h.startDate) return;
       addEvent({
@@ -99,7 +96,6 @@ export const getAllVisibleEvents = async (currentUser = null) => {
       });
     });
 
-    // Vacations (Background)
     (rawVacations || []).forEach(v => {
       if (!v.startDate) return;
       addEvent({
@@ -113,7 +109,6 @@ export const getAllVisibleEvents = async (currentUser = null) => {
       });
     });
 
-    // Tasks
     (rawTasks || []).forEach(t => {
       if (!t.submissionDate) return;
       addEvent({
@@ -125,7 +120,6 @@ export const getAllVisibleEvents = async (currentUser = null) => {
       });
     });
 
-    // Personal Student Events (Filter by UID)
     if (userUID) {
       (allRawStudentEvents || [])
         .filter(event => event.studentId === userUID)
@@ -142,37 +136,143 @@ export const getAllVisibleEvents = async (currentUser = null) => {
         });
     }
 
-    // Year & Semester Markers (Block Display)
     (years || []).forEach(year => {
       if (year.startDate) {
-        addEvent({
-          id: `y-start-${year.yearCode}`,
-          title: `${EVENT_ICONS.yearMarker} Year ${year.yearNumber} Starts`,
-          start: year.startDate,
-          allDay: true,
-          display: 'block',
-          extendedProps: { ...year, type: 'yearMarker' }
-        });
+        addEvent({ id: `y-start-${year.yearCode}`, title: `${EVENT_ICONS.yearMarker} Year ${year.yearNumber} Starts`, start: year.startDate, allDay: true, display: 'block', extendedProps: { ...year, type: 'yearMarker' } });
       }
       (year.semesters || []).forEach(semester => {
         if (semester.startDate) {
-          addEvent({
-            id: `s-start-${semester.semesterCode}`,
-            title: `${EVENT_ICONS.semesterMarker} Sem. ${semester.semesterNumber} (${year.yearNumber}) Starts`,
-            start: semester.startDate,
-            allDay: true,
-            display: 'block',
-            extendedProps: { ...semester, type: 'semesterMarker', yearCode: year.yearCode }
-          });
+          addEvent({ id: `s-start-${semester.semesterCode}`, title: `${EVENT_ICONS.semesterMarker} Sem. ${semester.semesterNumber} (${year.yearNumber}) Starts`, start: semester.startDate, allDay: true, display: 'block', extendedProps: { ...semester, type: 'semesterMarker', yearCode: year.yearCode } });
         }
       });
     });
 
-    console.log(`[getAllVisibleEvents] Returning ${allEvents.length} total events.`);
+    console.log(`[getAllVisibleEvents] Returning ${allEvents.length} total events for FullCalendar.`);
     return allEvents;
   
   } catch(error) {
     console.error("[getAllVisibleEvents] Critical error:", error);
     return [];
+  }
+};
+
+// ==============================================================================
+//  *** פונקציה חדשה - עבור סוכן ה-AI ***
+// ==============================================================================
+export const fetchEventsForAI = async (currentUser, startDate, endDate) => {
+  const userUID = currentUser?.uid;
+  if (!userUID || !startDate || !endDate) {
+    console.error("[fetchEventsForAI] Missing required parameters: currentUser, startDate, or endDate.");
+    return { error: "User, start date, and end date are required." };
+  }
+
+  console.log(`[fetchEventsForAI] Fetching events for AI. UID: ${userUID}, Range: ${startDate} to ${endDate}`);
+
+  try {
+    const filterInterval = {
+        start: parseISO(startDate),
+        // הוספת יום אחד לטווח כדי לכלול את כל היום האחרון
+        end: addDays(parseISO(endDate), 1) 
+    };
+
+    // 1. Fetch all potentially relevant data
+    const [
+      rawMeetings, rawGeneralEvents, rawHolidays, rawVacations, rawTasks,
+      allRawStudentEvents, lecturersMap,
+    ] = await Promise.all([
+      fetchCollection("coursesMeetings"), fetchCollection("events"),
+      fetchCollection("holidays"), fetchCollection("vacations"),
+      fetchCollection("tasks"), fetchCollection("studentEvents"),
+      getLecturersMap(),
+    ]);
+
+    const AIEvents = [];
+
+    // 2. Process and filter each type of event
+    
+    // Course Meetings
+    (rawMeetings || []).forEach(m => {
+      if (!m.start?.toDate) return;
+      const eventStart = m.start.toDate();
+      if (isWithinInterval(eventStart, filterInterval)) {
+        AIEvents.push({
+          type: 'שיעור', // "Course Meeting"
+          title: m.title || m.courseName,
+          start: eventStart.toISOString(),
+          end: m.end?.toDate ? m.end.toDate().toISOString() : eventStart.toISOString(),
+          details: `מרצה: ${lecturersMap.get(m.lecturerId) || 'לא ידוע'}. קוד קורס: ${m.courseCode}`
+        });
+      }
+    });
+
+    // General Events
+    (rawGeneralEvents || []).forEach(e => {
+        if (!e.startDate) return;
+        const eventStart = parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`);
+        if (isWithinInterval(eventStart, filterInterval)) {
+            AIEvents.push({
+                type: 'אירוע מערכת', // "General Event"
+                title: e.eventName,
+                start: eventStart.toISOString(),
+                end: e.endDate ? parseISO(e.allDay ? e.endDate : `${e.endDate}T${e.endHour}`).toISOString() : eventStart.toISOString(),
+                details: e.notes || `אירוע של יום שלם: ${e.allDay ? 'כן' : 'לא'}`
+            });
+        }
+    });
+
+    // Holidays and Vacations
+    [...rawHolidays, ...rawVacations].forEach(h => {
+        if (!h.startDate || !h.endDate) return;
+        const holidayInterval = { start: parseISO(h.startDate), end: addDays(parseISO(h.endDate), 1) };
+        // Check if the holiday interval overlaps with the filter interval
+        if (max([filterInterval.start, holidayInterval.start]) < min([filterInterval.end, holidayInterval.end])) {
+            AIEvents.push({
+                type: h.holidayName ? 'חג' : 'חופשה', // "Holiday" or "Vacation"
+                title: h.holidayName || h.vacationName,
+                start: holidayInterval.start.toISOString(),
+                end: parseISO(h.endDate).toISOString(),
+                details: h.notes || `נמשך כל היום.`
+            });
+        }
+    });
+    
+    // Tasks
+    (rawTasks || []).forEach(t => {
+      if (!t.submissionDate) return;
+      const eventStart = parseISO(`${t.submissionDate}T${t.submissionHour || '23:59'}`);
+      if (isWithinInterval(eventStart, filterInterval)) {
+        AIEvents.push({
+          type: 'מטלה להגשה', // "Task"
+          title: t.assignmentName,
+          start: eventStart.toISOString(),
+          end: eventStart.toISOString(),
+          details: `קורס: ${t.courseCode}. ${t.notes || 'אין הערות נוספות.'}`
+        });
+      }
+    });
+
+    // Personal Student Events (Filter by UID)
+    (allRawStudentEvents || [])
+      .filter(event => event.studentId === userUID)
+      .forEach(e => {
+        if (!e.startDate) return;
+        const eventStart = parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`);
+        if (isWithinInterval(eventStart, filterInterval)) {
+          AIEvents.push({
+            type: 'אירוע אישי', // "Personal Event"
+            title: e.eventName,
+            start: eventStart.toISOString(),
+            end: e.endDate ? parseISO(e.allDay ? e.endDate : `${e.endDate}T${e.endHour}`).toISOString() : eventStart.toISOString(),
+            details: e.notes || `אירוע של יום שלם: ${e.allDay ? 'כן' : 'לא'}`
+          });
+        }
+      });
+
+    console.log(`[fetchEventsForAI] Returning ${AIEvents.length} events for the specified range.`);
+    return { events: AIEvents }; // החזרת אובייקט עם המפתח 'events' כפי שהגדרנו במטפל
+
+  } catch (error) {
+    console.error("[fetchEventsForAI] Critical error:", error);
+    return { error: `An error occurred while fetching events: ${error.message}` };
   }
 };

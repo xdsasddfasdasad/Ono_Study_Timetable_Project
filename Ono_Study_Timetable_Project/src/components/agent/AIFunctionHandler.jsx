@@ -1,124 +1,63 @@
 // src/components/agent/AIFunctionHandler.jsx
 
-import { useEffect, useCallback } from 'react';
-import { useAgent } from '../../context/AgentContext';
-import { useAuth } from '../../context/AuthContext';
-import { useEvents } from '../../context/EventsContext';
-import { formMappings } from '../../utils/formMappings'; // נניח שיש לך קובץ כזה
-import { handleSaveOrUpdateRecord, handleDeleteEntity } from '../../handlers/formHandlers';
-import { fetchCollectionWithQuery, fetchCollection } from '../../firebase/firestoreService';
-import { where } from 'firebase/firestore';
-import { parseDate } from 'chrono-node';
-import { startOfDay, endOfDay } from 'date-fns';
+// ⬇️ שלב 1: ייבוא הפונקציה החדשה והייעודית מהקובץ 'getAllVisibleEvents.js'.
+// שינינו את שם הפונקציה המיובאת ל-fetchEventsForAI.
+import { fetchEventsForAI } from '../../utils/getAllVisibleEvents';
 
-export default function AIFunctionHandler() {
-    const { messages, sendMessage, isLoading } = useAgent();
-    const { currentUser } = useAuth();
-    const { refreshEvents } = useEvents();
+// זו לא קומפוננטה של ריאקט, אלא פונקציית שירות שמתרגמת בקשות AI לפעולות במערכת.
+// היא מקבלת את בקשת הכלי מ-Gemini ומחזירה פונקציה שממתינה ל-currentUser.
+export const handleAIFunctionCall = async (toolCall) => {
+    
+    const functionName = toolCall.functionCall.name;
+    const args = toolCall.functionCall.args;
 
-    const executeFunctionCall = useCallback(async (functionCall) => {
-        const { name: functionName, args: functionArgs } = functionCall;
-        console.log(`[AIFunctionHandler] Executing: ${functionName}`, functionArgs);
-        
-        let functionResultPayload;
+    console.log(`[AIFunctionHandler] AI is requesting to call function: '${functionName}' with arguments:`, args);
 
-        try {
-            switch (functionName) {
-                case 'findRecords': {
-                    const { recordType, searchText, dateQuery } = functionArgs;
-                    const collectionName = formMappings[recordType]?.collectionName;
-                    if (!collectionName) throw new Error(`Collection for '${recordType}' not found.`);
-
-                    const queryConstraints = [];
-                    
-                    // טיפול בשאילתת תאריך
-                    if (dateQuery) {
-                        const parsedDate = parseDate(dateQuery, new Date(), { forwardDate: true });
-                        if (parsedDate) {
-                            queryConstraints.push(where("startDate", ">=", startOfDay(parsedDate)));
-                            queryConstraints.push(where("startDate", "<=", endOfDay(parsedDate)));
-                        }
-                    }
-                    
-                    // טיפול בחיפוש טקסט (מוגבל ב-Firestore, נדרשת אסטרטגיה מתקדמת יותר כמו Algolia לחיפוש מלא)
-                    // כרגע נשתמש בסינון בצד הלקוח אחרי קבלת התוצאות
-                    let results;
-                    if (queryConstraints.length > 0) {
-                        results = await fetchCollectionWithQuery(collectionName, queryConstraints);
-                    } else {
-                        results = await fetchCollection(collectionName);
-                    }
-                    
-                    if (searchText) {
-                        const lowerCaseSearch = searchText.toLowerCase();
-                        // נסנן לפי שדה השם הרלוונטי לכל סוג רשומה
-                        results = results.filter(item => 
-                           (item.eventName && item.eventName.toLowerCase().includes(lowerCaseSearch)) ||
-                           (item.courseName && item.courseName.toLowerCase().includes(lowerCaseSearch)) ||
-                           (item.holidayName && item.holidayName.toLowerCase().includes(lowerCaseSearch)) ||
-                           (item.name && item.name.toLowerCase().includes(lowerCaseSearch))
-                        );
-                    }
-
-                    functionResultPayload = { success: true, count: results.length, data: results.slice(0, 10) }; // החזרת 10 תוצאות ראשונות למניעת הצפה
-                    break;
-                }
-                case 'saveOrUpdateRecord': {
-                    const { recordType, id, data } = functionArgs;
-                    const mode = id ? 'edit' : 'add';
-                    const collectionName = formMappings[recordType]?.collectionName;
-                    if (!collectionName) throw new Error(`Collection for '${recordType}' not found.`);
-
-                    let dataToSave = data;
-                    if (recordType === 'studentEvent' && mode === 'add') {
-                        if (!currentUser?.uid) throw new Error("User not logged in.");
-                        dataToSave.studentId = currentUser.uid;
-                    }
-
-                    const result = await handleSaveOrUpdateRecord(collectionName, { ...dataToSave, id }, mode, { recordType, editingId: id });
-                    if (!result.success) throw new Error(result.message);
-                    
-                    await refreshEvents();
-                    functionResultPayload = { success: true, message: "הפעולה בוצעה בהצלחה.", recordId: result.id };
-                    break;
-                }
-                case 'deleteRecord': {
-                    const { recordType, recordId, parentId } = functionArgs;
-                    const collectionName = formMappings[recordType]?.collectionName;
-                    if (!collectionName) throw new Error(`Collection for '${recordType}' not found.`);
-                    if (!recordId) throw new Error("A recordId is required for deletion.");
-
-                    const result = await handleDeleteEntity(collectionName, recordId, { recordType, parentDocId: parentId });
-                    if (!result.success) throw new Error(result.message);
-                    
-                    await refreshEvents();
-                    functionResultPayload = { success: true, message: "הפריט נמחק." };
-                    break;
-                }
-                default:
-                    throw new Error(`Unknown function: "${functionName}"`);
-            }
-        } catch (error) {
-            console.error(`[AIFunctionHandler] Error executing ${functionName}:`, error);
-            functionResultPayload = { success: false, error: error.message };
+    // תבנית זו (Currying) מאפשרת לנו להפריד בין קבלת בקשת ה-AI
+    // לבין קבלת המידע על המשתמש המחובר, שזמין רק בקומפוננטה.
+    const callFunction = async (currentUser) => {
+        // בדיקת בטיחות: ודא שהמשתמש מחובר לפני ביצוע פעולות רגישות.
+        if (!currentUser) {
+            console.error("[AIFunctionHandler] Error: Cannot execute function call, user is not logged in.");
+            return { tool: toolCall, output: { error: "User not logged in. Please log in to get personal data." }};
         }
 
-        // שולחים את התוצאה בחזרה ל-Context כדי שימשיך את השיחה עם ה-AI
-        sendMessage({
-            role: 'function',
-            name: functionName,
-            response: functionResultPayload
-        });
-
-    }, [currentUser, refreshEvents, sendMessage]);
-
-    useEffect(() => {
-        const lastMessage = messages[messages.length - 1];
-        // בודקים אם ההודעה האחרונה היא קריאה לפונקציה, ואם אנחנו לא כבר בתהליך טעינה
-        if (lastMessage?.role === 'agent' && lastMessage.functionCall && !isLoading) {
-            executeFunctionCall(lastMessage.functionCall);
+        // ודא שהפרמטרים הנדרשים (שהוגדרו ב-aiTools.js) אכן הגיעו.
+        if (functionName === 'getCalendarEvents' && (!args.startDate || !args.endDate)) {
+            console.error("[AIFunctionHandler] Error: Missing startDate or endDate for getCalendarEvents.");
+            return { tool: toolCall, output: { error: "Missing required date parameters to fetch events." }};
         }
-    }, [messages, isLoading, executeFunctionCall]);
 
-    return null; // רכיב זה אינו מרנדר כלום
-}
+        switch (functionName) {
+            case 'getCalendarEvents':
+                try {
+                    console.log(`[AIFunctionHandler] Executing 'fetchEventsForAI' for user: ${currentUser.uid}`);
+                    
+                    // ⬇️ שלב 2: שימוש בפונקציה החדשה והיעילה.
+                    // הפונקציה 'fetchEventsForAI' כבר מסננת לפי תאריכים ומחזירה פורמט פשוט.
+                    // היא גם מחזירה את התוצאה עטופה באובייקט { events: [...] } או { error: "..." }.
+                    const result = await fetchEventsForAI(currentUser, args.startDate, args.endDate);
+
+                    // ⬇️ שלב 3: החזרת התוצאה ישירות, כפי שהיא, ל-Gemini.
+                    return { tool: toolCall, output: result };
+                } catch (error) {
+                    console.error("[AIFunctionHandler] Error executing 'fetchEventsForAI':", error);
+                    return { tool: toolCall, output: { error: error.message } };
+                }
+
+            // ניתן להוסיף כאן case-ים נוספים עבור כלים עתידיים, למשל:
+            // case 'getLecturerInfo':
+            //   const lecturerData = await fetchLecturerByName(args.lecturerName);
+            //   return { tool: toolCall, output: { data: lecturerData } };
+            // ...
+
+            default:
+                console.warn(`[AIFunctionHandler] Unknown function call received from AI: ${functionName}`);
+                return { tool: toolCall, output: { error: `The function '${functionName}' is not recognized by the system.` } };
+        }
+    }
+    
+    // הפונקציה הראשית מחזירה את הפונקציה הפנימית.
+    // הקומפוננטה שקראה ל-handleAIFunctionCall תקרא לפונקציה המוחזרת עם currentUser.
+    return callFunction;
+};

@@ -8,11 +8,14 @@ import { AuthProvider } from "./context/AuthContext";
 import { EventsProvider } from "./context/EventsContext";
 import AppRouter from "./router/AppRouter";
 import { AgentProvider } from './context/AgentContext';
-import {AppDataProvider} from './context/AppDataContext'
-// --- STEP 6: Import the new global agent components ---
+import { AppDataProvider } from './context/AppDataContext';
+
+// --- ייבוא הקומפוננטות הגלובליות של הסוכן ---
 import FloatingAgentButton from './components/agent/FloatingAgentButton';
 import AgentModal from './components/agent/AgentModal';
-import AIFunctionHandler from './components/agent/AIFunctionHandler';
+
+// שים לב: AIFunctionHandler לא מיובא כאן כלל, כי הוא לא קומפוננטה.
+// הוא מיובא ונעשה בו שימוש אך ורק בתוך AgentModal.jsx.
 
 function App() {
   console.log("App component rendering...");
@@ -21,25 +24,28 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <EventsProvider> {/* EventsProvider first is fine */}
+        <EventsProvider>
           <AppDataProvider>
-            <AgentProvider> {/* AgentProvider wraps the components that need it */}
+            {/* AgentProvider עוטף את כל האפליקציה כדי שהקונטקסט יהיה זמין לכל הקומפוננטות */}
+            <AgentProvider>
               
-              {/* Your main application router */}
-              <AppRouter/>
+              {/* הראוטר הראשי של האפליקציה שלך */}
+              <AppRouter />
               
-              {/* --- STEP 6: Add the global agent components here --- */}
-              {/* These components will now be rendered on top of any page */}
-              {/* They will not affect your page layout as they are 'fixed' or modal */}
+              {/* --- הוספת הקומפוננטות הגלובליות של הסוכן --- */}
+              {/* קומפוננטות אלה ממוקמות כאן כדי שיוצגו מעל כל עמוד */}
               
-              {/* 1. The button that is always visible to open the agent */}
+              {/* 1. הכפתור שתמיד נראה ופותח את הסוכן */}
               <FloatingAgentButton />
               
-              {/* 2. The modal itself, which is hidden until isAgentOpen becomes true */}
+              {/* 2. המודאל עצמו, שמוסתר עד שהמשתנה isAgentOpen הופך ל-true */}
               <AgentModal />
               
-              {/* 3. The non-visual component that listens and executes AI function calls */}
-              <AIFunctionHandler />
+              {/* 
+                3. הסרנו את <AIFunctionHandler /> מכאן.
+                   זו לא קומפוננטה ויזואלית, אלא לוגיקה ש-AgentModal משתמש בה באופן פנימי.
+                   השארת השורה הזאת כאן תגרום לשגיאה.
+              */}
 
             </AgentProvider>
           </AppDataProvider>
