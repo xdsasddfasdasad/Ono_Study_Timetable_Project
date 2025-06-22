@@ -44,8 +44,8 @@ export default function TimeTableListViewPage() {
     const [years, setYears] = useState([]);
     
     useEffect(() => {
-        fetchCollection("courses").then(data => setCourses(data || []));
-        fetchCollection("years").then(data => setYears(data || []));
+        fetchCollection("courses").then(data => setCourses((data || []).sort((a,b) => a.courseName.localeCompare(b.courseName))));
+        fetchCollection("years").then(data => setYears((data || []).sort((a,b) => a.yearNumber.localeCompare(b.yearNumber))));
     }, []);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -112,7 +112,7 @@ export default function TimeTableListViewPage() {
     const availableSemesters = useMemo(() => {
         if (!filters.yearCode) return [];
         const selectedYear = years.find(y => y.yearCode === filters.yearCode);
-        return selectedYear?.semesters || [];
+        return (selectedYear?.semesters || []).sort((a, b) => a.semesterNumber.localeCompare(b.semesterNumber));
     }, [filters.yearCode, years]);
     
     const filteredAndGroupedEvents = useMemo(() => {
@@ -241,9 +241,9 @@ export default function TimeTableListViewPage() {
                 <Grid container spacing={2} alignItems="center">
                     <Grid item xs={12} lg={4}><TextField name="searchText" label="Search Title/Notes" variant="outlined" size="small" fullWidth value={filters.searchText} onChange={handleFilterChange} /></Grid>
                     <Grid item xs={6} sm={4} md={3} lg={2}><FormControl size="small" fullWidth><InputLabel>Types</InputLabel><Select name="eventTypes" multiple value={filters.eventTypes} onChange={handleEventTypeFilterChange} input={<OutlinedInput label="Types" />} renderValue={(selected) => `${selected.length} of ${ALL_EVENT_TYPES.length} selected`}><MenuItem value="__select_all__"><Checkbox checked={areAllTypesSelected} indeterminate={areSomeTypesSelected} /><ListItemText primary="Select All / None" /></MenuItem><Divider />{ALL_EVENT_TYPES.map((key) => (<MenuItem key={key} value={key}><Checkbox checked={filters.eventTypes.indexOf(key) > -1} /><ListItemText primary={`${getEventStyle(key).icon} ${getEventStyle(key).label}`} /></MenuItem>))}</Select></FormControl></Grid>
-                    <Grid item xs={6} sm={4} md={3} lg={2}><FormControl size="small" fullWidth><InputLabel>Course</InputLabel><Select name="courseCode" value={filters.courseCode} label="Course" onChange={handleFilterChange}><MenuItem value=""><em>All Courses</em></MenuItem>{courses.map(course => (<MenuItem key={course.courseCode} value={course.courseCode}>{course.courseName}</MenuItem>))}</Select></FormControl></Grid>
-                    <Grid item xs={6} sm={4} md={3} lg={2}><FormControl size="small" fullWidth><InputLabel>Year</InputLabel><Select name="yearCode" value={filters.yearCode} label="Year" onChange={handleFilterChange}><MenuItem value=""><em>All Years</em></MenuItem>{years.map(y => (<MenuItem key={y.yearCode} value={y.yearCode}>{`Year ${y.yearNumber}`}</MenuItem>))}</Select></FormControl></Grid>
-                    <Grid item xs={6} sm={4} md={3} lg={2}><FormControl size="small" fullWidth disabled={!filters.yearCode}><InputLabel>Semester</InputLabel><Select name="semesterCode" value={filters.semesterCode} label="Semester" onChange={handleFilterChange}><MenuItem value=""><em>All Semesters</em></MenuItem>{availableSemesters.map(s => (<MenuItem key={s.semesterCode} value={s.semesterCode}>{`Sem. ${s.semesterNumber}`}</MenuItem>))}</Select></FormControl></Grid>
+                    <Grid item xs={6} sm={4} md={3} lg={2}><FormControl size="small" fullWidth><InputLabel>Course</InputLabel><Select name="courseCode" value={filters.courseCode} label="Course" onChange={handleFilterChange}><MenuItem value=""><em>All Courses</em></MenuItem>{courses.map((course, index) => (<MenuItem key={`${course.courseCode}-${index}`} value={course.courseCode}>{course.courseName}</MenuItem>))}</Select></FormControl></Grid>
+                    <Grid item xs={6} sm={4} md={3} lg={2}><FormControl size="small" fullWidth><InputLabel>Year</InputLabel><Select name="yearCode" value={filters.yearCode} label="Year" onChange={handleFilterChange}><MenuItem value=""><em>All Years</em></MenuItem>{years.map((y, index) => (<MenuItem key={`${y.yearCode}-${index}`} value={y.yearCode}>{`Year ${y.yearNumber}`}</MenuItem>))}</Select></FormControl></Grid>
+                    <Grid item xs={6} sm={4} md={3} lg={2}><FormControl size="small" fullWidth disabled={!filters.yearCode}><InputLabel>Semester</InputLabel><Select name="semesterCode" value={filters.semesterCode} label="Semester" onChange={handleFilterChange}><MenuItem value=""><em>All Semesters</em></MenuItem>{availableSemesters.map((s, index) => (<MenuItem key={`${s.semesterCode}-${index}`} value={s.semesterCode}>{`Sem. ${s.semesterNumber}`}</MenuItem>))}</Select></FormControl></Grid>
                     <Grid item xs={6} sm={4} md={3} lg={2}><FormControl size="small" fullWidth><InputLabel>Day</InputLabel><Select name="weekDay" value={filters.weekDay} label="Day" onChange={handleFilterChange}><MenuItem value=""><em>Any Day</em></MenuItem>{WEEK_DAYS.map((day, index) => (<MenuItem key={index} value={index}>{day}</MenuItem>))}</Select></FormControl></Grid>
                     {/* ✨ --- תיקון 1: הוספת onChange לשדות התאריך --- ✨ */}
                     <Grid item xs={12} sm={6} md={3} lg={2}>

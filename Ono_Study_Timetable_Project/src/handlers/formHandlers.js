@@ -2,7 +2,9 @@ import {
     setDocument, updateDocument, deleteDocument,
     saveSemesterInYear, deleteSemesterFromYear,
     saveRoomInSite, deleteRoomFromSite,
+    fetchCollectionWithQuery, performBatchWrites
 } from "../firebase/firestoreService";
+import { where } from "firebase/firestore";
 import { validateFormByType } from "../utils/validateForm";
 import { formMappings } from "../utils/formMappings";
 import { regenerateMeetingsForCourse, deleteMeetingsForCourse } from "../utils/courseMeetingGenerator";
@@ -135,24 +137,88 @@ export const handleDeleteEntity = async (entityKey, recordId, options = {}) => {
     try {
         const opDetails = getOperationDetails(entityKey, {}, recordTypeHint);
         const { recordType, collectionName } = opDetails;
+        const batchWrites = []; // Array to hold all delete operations
 
-        if (opDetails.isNested) {
-            if (!parentDocId) throw new Error(`Parent ID required for nested delete of ${recordType}.`);
-            if (recordType === 'semester') await deleteSemesterFromYear(parentDocId, recordId);
-            else if (recordType === 'room') await deleteRoomFromSite(parentDocId, recordId);
-        } else {
-            if (recordType === 'student') {
-                console.warn(`Deleting student Firestore profile ${recordId}. The corresponding Auth user is NOT deleted from Auth service automatically.`);
+        // ✨ FIX 3.1: Logic for deleting a Year
+        if (recordType === 'year') {
+            console.log(`[Handler:Delete] Year deletion detected for ${recordId}. Cascading...`);
+            // Fetch all courses that belong to semesters within this year
+            const yearToDelete = await fetchCollectionWithQuery('years', [where('yearCode', '==', recordId)]);
+            const semesterCodesToDelete = (yearToDelete[0]?.semesters || []).map(s => s.semesterCode);
+            
+            if (semesterCodesToDelete.length > 0) {
+                const relatedCourses = await fetchCollectionWithQuery('courses', [where('semesterCode', 'in', semesterCodesToDelete)]);
+                for (const course of relatedCourses) {
+                    console.log(`[Handler:Delete] -> Deleting meetings and tasks for related course: ${course.courseCode}`);
+                    // A. Delete all meetings for each related course
+                    const courseMeetings = await fetchCollectionWithQuery('coursesMeetings', [where('courseCode', '==', course.courseCode)]);
+                    courseMeetings.forEach(meeting => batchWrites.push({ type: 'delete', collectionPath: 'coursesMeetings', documentId: meeting.id }));
+                    
+                    // B. Delete all tasks for each related course
+                    const courseTasks = await fetchCollectionWithQuery('tasks', [where('courseCode', '==', course.courseCode)]);
+                    courseTasks.forEach(task => batchWrites.push({ type: 'delete', collectionPath: 'tasks', documentId: task.assignmentCode }));
+                    
+                    // C. Delete the course definition itself
+                    //batchWrites.push({ type: 'delete', collectionPath: 'courses', documentId: course.courseCode });
+                }
             }
-            await deleteDocument(collectionName, recordId);
         }
 
-        if (recordType === 'course') {
-            console.log(`[Handler:Delete] Post-delete action: Deleting all meetings for course ${recordId}`);
-            await deleteMeetingsForCourse(recordId);
+        // ✨ FIX 3.2: Logic for deleting a Semester
+        if (recordType === 'semester') {
+            console.log(`[Handler:Delete] Semester deletion detected for ${recordId}. Cascading...`);
+            // This is handled by the Year deletion logic, but if a semester is deleted directly:
+            await deleteSemesterFromYear(parentDocId, recordId); // This removes it from the parent year document
+
+            // Then, find and delete all related courses (and their meetings/tasks)
+            const relatedCourses = await fetchCollectionWithQuery('courses', [where('semesterCode', '==', recordId)]);
+            for (const course of relatedCourses) {
+                console.log(`[Handler:Delete] -> Deleting meetings and tasks for related course: ${course.courseCode}`);
+                const courseMeetings = await fetchCollectionWithQuery('coursesMeetings', [where('courseCode', '==', course.courseCode)]);
+                courseMeetings.forEach(meeting => batchWrites.push({ type: 'delete', collectionPath: 'coursesMeetings', documentId: meeting.id }));
+                
+                const courseTasks = await fetchCollectionWithQuery('tasks', [where('courseCode', '==', course.courseCode)]);
+                courseTasks.forEach(task => batchWrites.push({ type: 'delete', collectionPath: 'tasks', documentId: task.assignmentCode }));
+                
+                // batchWrites.push({ type: 'delete', collectionPath: 'courses', documentId: course.courseCode });
+            }
+            // No need to delete the main document, as semesters are nested.
         }
         
-        return { success: true, message: `${recordType} deleted successfully.` };
+        // ✨ FIX 4: Logic for deleting a Course
+        if (recordType === 'course') {
+            console.log(`[Handler:Delete] Course deletion detected for ${recordId}. Cascading...`);
+            // A. Delete all meetings for this course
+            const courseMeetings = await fetchCollectionWithQuery('coursesMeetings', [where('courseCode', '==', recordId)]);
+            courseMeetings.forEach(meeting => batchWrites.push({ type: 'delete', collectionPath: 'coursesMeetings', documentId: meeting.id }));
+            
+            // B. Delete all tasks for this course
+            const courseTasks = await fetchCollectionWithQuery('tasks', [where('courseCode', '==', recordId)]);
+            courseTasks.forEach(task => batchWrites.push({ type: 'delete', collectionPath: 'tasks', documentId: task.assignmentCode }));
+        }
+
+        // --- Main Deletion Logic ---
+        if (opDetails.isNested && recordType !== 'semester') { // Semester is special
+            if (!parentDocId) throw new Error(`Parent ID required for nested delete of ${recordType}.`);
+            if (recordType === 'room') await deleteRoomFromSite(parentDocId, recordId);
+        } else if (recordType !== 'semester') {
+             if (recordType === 'student') {
+                console.warn(`Deleting student Firestore profile ${recordId}. Auth user NOT deleted.`);
+            }
+            // Add the main document to be deleted
+            batchWrites.push({ type: 'delete', collectionPath: collectionName, documentId: recordId });
+        }
+
+        // --- Execute all deletes in a single batch ---
+        if (batchWrites.length > 0) {
+            console.log(`[Handler:Delete] Executing batch delete of ${batchWrites.length} documents.`);
+            await performBatchWrites(batchWrites);
+        } else {
+             // This can happen for a semester deletion if there are no related courses
+            console.log("[Handler:Delete] No batch operations to perform, deletion considered complete.");
+        }
+        
+        return { success: true, message: `${recordType} and all related data deleted successfully.` };
 
     } catch (error) {
         console.error(`[Handler:Delete] CRITICAL ERROR for ${entityKey} (ID: ${recordId}):`, error);

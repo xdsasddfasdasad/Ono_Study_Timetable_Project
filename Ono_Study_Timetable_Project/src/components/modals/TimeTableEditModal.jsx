@@ -43,26 +43,33 @@ const loadSelectOptionsAsync = async () => {
 };
 
 export default function TimeTableEditModal({ open, onClose, onSave, initialData }) {
-    // ה-recordType מגיע עכשיו מ-initialData.type
     const recordType = initialData?.type;
 
-    const [formData, setFormData] = useState({});
+    const [formData, setFormData] = useState(null); // ✨ FIX: Start with null
     const [errors, setErrors] = useState({});
     const [generalError, setGeneralError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+    const [isLoadingOptions, setIsLoadingOptions] = useState(true); // ✨ FIX: Start as true
     const [selectOptions, setSelectOptions] = useState({});
 
     const FormComponent = recordType ? formComponentMap[recordType] : null;
 
     useEffect(() => {
         if (open && initialData) {
-            setIsLoadingOptions(true);
-            loadSelectOptionsAsync().then(options => setSelectOptions(options));
-            setFormData({ ...initialData });
-            setIsLoadingOptions(false);
-            setErrors({}); setGeneralError("");
+            setIsLoadingOptions(true); // Set loading to true on open
+            setFormData(null); // Clear previous data
+            setErrors({}); 
+            setGeneralError("");
+
+            // ✨ FIX 1: The main logic fix is here.
+            // We ensure all state updates happen inside the .then() block
+            // only after the asynchronous operation is complete.
+            loadSelectOptionsAsync().then(options => {
+                setSelectOptions(options);
+                setFormData({ ...initialData }); // Set form data AFTER options are loaded
+                setIsLoadingOptions(false); // Set loading to false AFTER everything is ready
+            });
         }
     }, [open, initialData]);
 
@@ -74,6 +81,7 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData 
     }, [errors]);
 
     const handleUpdateClick = useCallback(async () => {
+        // ✨ FIX 2: Check for formData existence before saving
         if (!recordType || !formData) return;
         setIsLoading(true); setErrors({}); setGeneralError("");
 
@@ -84,13 +92,16 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData 
         setIsLoading(false);
 
         if (result.success) {
-            onSave?.(); onClose?.();
+            // This now correctly calls the `onSave` prop
+            onSave?.(); 
+            onClose?.();
         } else {
             setErrors(result.errors || {});
             setGeneralError(result.message || "Failed to update record.");
         }
     }, [recordType, formData, onSave, onClose]);
 
+    // ... (handleDeleteClick is unchanged) ...
     const handleDeleteClick = useCallback(async () => {
         if (!recordType || !formData) return;
         const mapping = formMappings[recordType];
@@ -102,7 +113,7 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData 
 
         const result = await handleDeleteEntity(mapping.collectionName, recordId, { 
             recordType: recordType,
-            parentDocId: formData.yearCode // רלוונטי רק למחיקת סמסטר
+            parentDocId: formData.yearCode
         });
         setIsDeleting(false);
 
@@ -113,14 +124,16 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData 
         }
     }, [recordType, formData, onSave, onClose]);
 
+
     return (
         <PopupModal open={open} onClose={onClose} title={`Edit ${formMappings[recordType]?.label || 'Record'}`}>
             <DialogContent>
               <Stack spacing={3} sx={{ minWidth: { sm: 500 }, pt: 1 }}>
                   {generalError && <Alert severity="error">{generalError}</Alert>}
                   
-                  {isLoadingOptions ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>
+                  {/* ✨ FIX 3: Check for formData as well before rendering the form */}
+                  {isLoadingOptions || !formData ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
                   ) : FormComponent ? (
                       <FormComponent
                           formData={formData}
@@ -139,7 +152,7 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData 
                 </Button>
                 <Stack direction="row" spacing={1}>
                      <Button onClick={onClose} disabled={isLoading || isDeleting}>Cancel</Button>
-                     <Button onClick={handleUpdateClick} variant="contained" disabled={isLoading || isDeleting || isLoadingOptions}>
+                     <Button onClick={handleUpdateClick} variant="contained" disabled={!formData || isLoading || isDeleting || isLoadingOptions}>
                         {isLoading ? "Updating..." : "Update"}
                      </Button>
                 </Stack>

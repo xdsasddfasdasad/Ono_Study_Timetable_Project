@@ -1,10 +1,14 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Button, Stack, CircularProgress, Typography, Box, Alert } from "@mui/material";
+
+// ייבוא כל המודאלים הנדרשים
 import FullCalendarView from "../../components/calendar/FullCalendarView";
 import TimeTableCalendarManageModal from "../../components/modals/TimeTableCalendarManageModal";
+import TimeTableEditModal from "../../components/modals/TimeTableEditModal"; // ייבוא שהיה חסר
 import EntitiesManageModal from "../../components/modals/EntitiesManageModal";
 import ManageCourseDefinitionModal from "../../components/modals/ManageCourseDefinitionModal";
 import ManageCourseMeetingsModal from "../../components/modals/ManageCourseMeetingsModal";
+
 import { useEvents } from "../../context/EventsContext";
 import { fetchCollection } from "../../firebase/firestoreService";
 
@@ -30,11 +34,9 @@ export default function TimeTableManagementPage() {
         loadCourseList();
     }, [loadCourseList]);
 
-    // קוד פשוט: רק מסנן החוצה אירועים של סטודנטים. אין צורך לשנות את הנתונים.
     const adminCalendarEvents = useMemo(() => {
         return allVisibleEvents.filter(event => event.extendedProps?.type !== 'studentEvent');
     }, [allVisibleEvents]);
-
 
     // === HANDLERS ===
     const handleCloseModals = useCallback(() => {
@@ -42,28 +44,14 @@ export default function TimeTableManagementPage() {
         setModalData(null);
     }, []);
 
+    // ✨ Handler אחיד להצלחה, יועבר לכל מודאל בפרופ onSave
     const handleSaveSuccess = useCallback(() => {
         handleCloseModals();
         refreshEvents();
         loadCourseList();
     }, [refreshEvents, loadCourseList, handleCloseModals]);
     
-    const openAddModal = (defaultDate = null) => {
-        setModalData({ isEditing: false, defaultDate: defaultDate });
-        setActiveModal('generic');
-    };
-
-    const openEditModal = (eventData) => {
-        let recordType = eventData.type;
-        if (eventData.type === 'yearMarker') recordType = 'year';
-        if (eventData.type === 'semesterMarker') recordType = 'semester';
-        
-        setModalData({ isEditing: true, data: { ...eventData, type: recordType } });
-        setActiveModal('generic');
-    };
-    
-    // הלוגיקה הזו תמיד הייתה נכונה. היא מקבלת את האירוע, עם הסוג המקורי שלו,
-    // ומעבירה אותו למודאל הנכון. כעת שהתצוגה תקינה, גם הפונקציונליות תעבוד.
+    // ✨ Handler לעריכה מהירה מתוך לוח השנה
     const handleEventClick = useCallback((clickInfo) => {
         const event = clickInfo.event;
         const props = event.extendedProps;
@@ -74,6 +62,7 @@ export default function TimeTableManagementPage() {
                 setActiveModal('courseMeetings');
                 break;
             
+            // כל אירועי לוח השנה הניתנים לעריכה
             case 'holiday':
             case 'vacation':
             case 'event':
@@ -81,15 +70,22 @@ export default function TimeTableManagementPage() {
             case 'yearMarker':
             case 'semesterMarker':
                 {
+                    // נכין את האובייקט המדויק עבור מודאל העריכה
+                    let recordType = props.type;
+                    if (props.type === 'yearMarker') recordType = 'year';
+                    if (props.type === 'semesterMarker') recordType = 'semester';
+
                     const dataForModal = {
                         ...props,
+                        type: recordType, // ודא שה-type הנכון מועבר
                         id: event.id,
                         title: event.title,
                         start: event.start,
                         end: event.end,
                         allDay: event.allDay,
                     };
-                    openEditModal(dataForModal);
+                    setModalData(dataForModal);
+                    setActiveModal('editEntry'); // פתיחת מודאל עריכה ישירה
                 }
                 break;
 
@@ -99,9 +95,9 @@ export default function TimeTableManagementPage() {
         }
     }, []);
 
-
+    // לחיצה על תאריך פותחת כעת את מודאל הניהול הכללי
     const handleDateClick = useCallback((dateClickInfo) => {
-        openAddModal(dateClickInfo.dateStr);
+        setActiveModal('manageEntries');
     }, []);
 
     // === RENDER LOGIC ===
@@ -113,7 +109,8 @@ export default function TimeTableManagementPage() {
             {eventsError && <Alert severity="error" sx={{ mb: 2 }}>{`Calendar data error: ${eventsError}`}</Alert>}
 
             <Stack direction="row" spacing={2} mb={3} justifyContent="center" flexWrap="wrap">
-                <Button variant="contained" onClick={() => openAddModal(new Date().toISOString().split('T')[0])}>Add Entry</Button>
+                {/* ✨ כפתור זה פותח את מודאל הניהול הראשי */}
+                <Button variant="contained" onClick={() => setActiveModal('manageEntries')}>Manage Calendar Entries</Button>
                 <Button variant="contained" onClick={() => setActiveModal('courseDef')}>Manage Courses</Button>
                 <Button variant="contained" onClick={() => setActiveModal('courseMeetings')}>Manage Meetings</Button>
                 <Button variant="contained" onClick={() => setActiveModal('entities')}>Manage Entities</Button>
@@ -129,24 +126,34 @@ export default function TimeTableManagementPage() {
 
             {/* --- All Modals --- */}
             
-            {activeModal === 'generic' && (
+            {/* ✨ 1. המודאל הראשי לניהול רשומות לוח שנה */}
+            {activeModal === 'manageEntries' && (
                 <TimeTableCalendarManageModal
                     open={true}
                     onClose={handleCloseModals}
-                    onSave={handleSaveSuccess}
-                    initialData={modalData?.data}
-                    defaultDate={modalData?.defaultDate}
+                    onSave={handleSaveSuccess} // העברת הפרופ בשם הנכון
+                />
+            )}
+
+            {/* ✨ 2. המודאל לעריכה מהירה ישירות מהקלנדר */}
+            {activeModal === 'editEntry' && (
+                <TimeTableEditModal
+                    open={true}
+                    onClose={handleCloseModals}
+                    onSave={handleSaveSuccess} // העברת הפרופ בשם הנכון
+                    initialData={modalData}
                 />
             )}
             
+            {/* שאר המודאלים נשארים ללא שינוי */}
             <EntitiesManageModal open={activeModal === 'entities'} onClose={handleCloseModals} onSaveSuccess={handleSaveSuccess} />
             <ManageCourseDefinitionModal open={activeModal === 'courseDef'} onClose={handleCloseModals} onSaveSuccess={handleSaveSuccess} existingCourses={allCourses} isLoadingCourses={isLoadingCourses} />
             <ManageCourseMeetingsModal
                 open={activeModal === 'courseMeetings'}
                 onClose={handleCloseModals}
                 onSaveSuccess={handleSaveSuccess}
-                existingCourses={allCourses}
-                isLoadingCourses={isLoadingCourses}
+                // existingCourses={allCourses}
+                // isLoadingCourses={isLoadingCourses}
                 initialCourseCode={modalData?.courseCode}
                 initialMeetingId={modalData?.id}
             />

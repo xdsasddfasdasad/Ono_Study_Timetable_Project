@@ -1,19 +1,13 @@
 // src/utils/formMappings.js
 
-/**
- * מאגר מרכזי לכל המטא-דאטה של הישויות במערכת.
- * משמש כמקור האמת היחיד עבור handlers, טפסים, וולידציות.
- * המפתח הוא ה-recordType הלוגי.
- */
 export const formMappings = {
-  // --- User & Personal Entities ---
   student: {
     collectionName: 'students',
-    primaryKey: 'id', // Corresponds to Firebase Auth UID
+    primaryKey: 'id',
     label: 'Student',
     recordType: 'student',
     initialData: (defaults = {}) => ({
-      id: '', // Will be set to UID upon creation
+      id: '',
       studentIdCard: '',
       firstName: '',
       lastName: '',
@@ -33,7 +27,7 @@ export const formMappings = {
     label: 'Personal Event',
     recordType: 'studentEvent',
     initialData: (defaults = {}) => ({
-      eventCode: '', // Will be generated on save
+      eventCode: '',
       eventName: '',
       notes: '',
       startDate: new Date().toISOString().slice(0, 10),
@@ -44,8 +38,6 @@ export const formMappings = {
       ...defaults,
     }),
   },
-
-  // --- Academic Structure ---
   year: {
     collectionName: 'years',
     primaryKey: 'yearCode',
@@ -61,21 +53,19 @@ export const formMappings = {
     }),
   },
   semester: {
-    collectionName: 'years', // Lives inside a 'year' document
+    collectionName: 'years',
     primaryKey: 'semesterCode',
     label: 'Semester',
     recordType: 'semester',
     initialData: (defaults = {}) => ({
       semesterCode: `SEM-${Date.now()}`,
-      yearCode: '', // Must be provided
+      yearCode: '',
       semesterNumber: '',
       startDate: '',
       endDate: '',
       ...defaults,
     }),
   },
-
-  // --- Core Data Entities ---
   course: {
     collectionName: 'courses',
     primaryKey: 'courseCode',
@@ -87,31 +77,29 @@ export const formMappings = {
       semesterCode: '',
       lecturerId: '',
       roomCode: '',
-      hours: [{ day: 1, start: '09:00', end: '12:00' }],
+      hours: [{ day: '', start: '09:00', end: '12:00' }],
       notes: '',
       zoomMeetinglink: '',
       ...defaults,
     }),
   },
-
-  // --- ✨ הוספת ההגדרה החסרה עבור פגישת קורס ✨ ---
   courseMeeting: {
-    collectionName: 'coursesMeetings', // שם הקולקציה הנכון והעקבי
-    primaryKey: 'id', // המפתח הראשי הוא המזהה הייחודי של הפגישה
+    collectionName: 'coursesMeetings',
+    primaryKey: 'id',
     label: 'Course Meeting',
     recordType: 'courseMeeting',
     initialData: (defaults = {}) => ({
-      id: `CM-${Date.now()}`, // יצירת ID זמני
+      id: `CM-${Date.now()}`,
       title: '',
-      start: new Date().toISOString(), // שימוש בתאריך ושעה מלאים
-      end: new Date().toISOString(),   // שימוש בתאריך ושעה מלאים
+      start: new Date().toISOString(),
+      end: new Date().toISOString(),
       lecturerId: '',
       roomCode: '',
-      courseCode: '', // יתמלא אוטומטית מהורה
-      semesterCode: '', // יתמלא אוטומטית מהורה
+      courseCode: '',
+      semesterCode: '',
       notes: '',
       zoomMeetinglink: '',
-      type: 'courseMeeting', // ציון סוג הרשומה
+      type: 'courseMeeting',
       allDay: false,
       ...defaults,
     }),
@@ -143,20 +131,18 @@ export const formMappings = {
     }),
   },
   room: {
-    collectionName: 'sites', // Lives inside a 'site' document
+    collectionName: 'sites',
     primaryKey: 'roomCode',
     label: 'Room',
     recordType: 'room',
     initialData: (defaults = {}) => ({
       roomCode: `ROOM-${Date.now()}`,
-      siteCode: '', // Must be provided
+      siteCode: '',
       roomName: '',
       notes: '',
       ...defaults,
     }),
   },
-
-  // --- General Calendar Events & Tasks ---
   holiday: {
     collectionName: 'holidays',
     primaryKey: 'holidayCode',
@@ -169,6 +155,7 @@ export const formMappings = {
       endDate: new Date().toISOString().slice(0, 10),
       notes: '',
       type: 'holiday',
+      allDay: true, // Holidays default to all-day
       ...defaults,
     }),
   },
@@ -184,6 +171,7 @@ export const formMappings = {
       endDate: new Date().toISOString().slice(0, 10),
       notes: '',
       type: 'vacation',
+      allDay: true, // Vacations default to all-day
       ...defaults,
     }),
   },
@@ -213,7 +201,7 @@ export const formMappings = {
     initialData: (defaults = {}) => ({
       assignmentCode: `TASK-${Date.now()}`,
       assignmentName: '',
-      courseCode: '', // Must be provided
+      courseCode: '',
       submissionDate: new Date().toISOString().slice(0, 10),
       submissionHour: '23:59',
       notes: '',
@@ -223,12 +211,6 @@ export const formMappings = {
   },
 };
 
-/**
- * פונקציית עזר לייצור נתונים התחלתיים עבור טופס של ישות חדשה.
- * @param {string} recordType - סוג הרשומה (למשל, 'course', 'student').
- * @param {object} [defaultValues={}] - ערכים התחלתיים לדריסת ברירת המחדל (למשל, תאריך שנלחץ בלוח שנה).
- * @returns {object} אובייקט עם הנתונים ההתחלתיים לטופס.
- */
 export const generateInitialFormData = (recordType, defaultValues = {}) => {
   if (formMappings[recordType] && typeof formMappings[recordType].initialData === 'function') {
     const initialData = formMappings[recordType].initialData(defaultValues);
@@ -237,5 +219,5 @@ export const generateInitialFormData = (recordType, defaultValues = {}) => {
   }
 
   console.warn(`[generateInitialFormData] No mapping or initialData function found for recordType: ${recordType}`);
-  return { id: `TEMP-${Date.now()}`, ...defaultValues }; // Fallback
+  return { id: `TEMP-${Date.now()}`, ...defaultValues };
 };

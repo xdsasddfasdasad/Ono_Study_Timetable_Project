@@ -74,7 +74,7 @@ export default function CourseForm({
                      <InputLabel id="course-semester-select-label">Semester</InputLabel>
                      <Select labelId="course-semester-select-label" name="semesterCode" value={formData.semesterCode || ""} onChange={onChange} label="Semester">
                          <MenuItem value="" disabled><em>Select semester...</em></MenuItem>
-                         {semesterOptions.map(opt => (<MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>))}
+                                                          {semesterOptions.map((opt, index) => (<MenuItem key={`${opt.value}-${index}`} value={opt.value}>{opt.label}</MenuItem>))}
                          {semesterOptions.length === 0 && <MenuItem value="" disabled>No semesters available</MenuItem>}
                      </Select>
                      {getError('semesterCode') && <FormHelperText>{getError('semesterCode')}</FormHelperText>}
@@ -85,7 +85,7 @@ export default function CourseForm({
                      <InputLabel id="course-lecturer-select-label">Lecturer</InputLabel>
                      <Select labelId="course-lecturer-select-label" name="lecturerId" value={formData.lecturerId || ""} onChange={onChange} label="Lecturer">
                           <MenuItem value="" disabled><em>Select lecturer...</em></MenuItem>
-                         {lecturerOptions.map(opt => (<MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>))}
+                         {lecturerOptions.map((opt, index) => (<MenuItem key={`${opt.value}-${index}`} value={opt.value}>{opt.label}</MenuItem>))}
                          {lecturerOptions.length === 0 && <MenuItem value="" disabled>No lecturers available</MenuItem>}
                      </Select>
                      {getError('lecturerId') && <FormHelperText>{getError('lecturerId')}</FormHelperText>}
@@ -96,7 +96,7 @@ export default function CourseForm({
                      <InputLabel id="course-room-select-label">Default Room (Optional)</InputLabel>
                      <Select labelId="course-room-select-label" name="roomCode" value={formData.roomCode || ""} onChange={onChange} label="Default Room (Optional)">
                          <MenuItem value=""><em>None / Varies</em></MenuItem>
-                         {roomOptions.map(opt => (<MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>))}
+                         {roomOptions.map((opt, index) => (<MenuItem key={`${opt.value}-${index}`} value={opt.value}>{opt.label}</MenuItem>))}
                          {roomOptions.length === 0 && <MenuItem value="" disabled>No rooms available</MenuItem>}
                      </Select>
                      {getError('roomCode') && <FormHelperText>{getError('roomCode')}</FormHelperText>}

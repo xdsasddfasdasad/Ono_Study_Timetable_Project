@@ -1,7 +1,7 @@
 // src/utils/getAllVisibleEvents.js
 
 import { fetchCollection } from '../firebase/firestoreService';
-import { addDays, parseISO, format, isWithinInterval, max, min } from 'date-fns';
+import { addDays, parseISO, format } from 'date-fns';
 
 let lecturersMapCache = null;
 const getLecturersMap = async () => {
@@ -29,9 +29,6 @@ const EVENT_ICONS = {
   yearMarker: '🏁', semesterMarker: '🚩'
 };
 
-// ==============================================================================
-//  *** פונקציה מקורית (ללא שינוי) - עבור FullCalendar ***
-// ==============================================================================
 export const getAllVisibleEvents = async (currentUser = null) => {
   const userUID = currentUser?.uid;
   console.log(`[getAllVisibleEvents] Fetching all events for FullCalendar. Personal events for UID: ${userUID || 'Guest'}`);
@@ -91,7 +88,9 @@ export const getAllVisibleEvents = async (currentUser = null) => {
         start: h.startDate,
         end: getExclusiveEndDate(h.endDate),
         allDay: true,
-        display: 'background',
+        backgroundColor: '#ffcdd2',
+        borderColor: '#e57373',
+        textColor: '#b71c1c',
         extendedProps: { ...h, type: 'holiday' }
       });
     });
@@ -104,17 +103,21 @@ export const getAllVisibleEvents = async (currentUser = null) => {
         start: v.startDate,
         end: getExclusiveEndDate(v.endDate),
         allDay: true,
-        display: 'background',
+        backgroundColor: '#ffecb3',
+        borderColor: '#ffd54f',
+        textColor: '#e65100',
         extendedProps: { ...v, type: 'vacation' }
       });
     });
 
     (rawTasks || []).forEach(t => {
       if (!t.submissionDate) return;
-      addEvent({
+      const startTimeString = `${t.submissionDate}T${t.submissionHour || '23:59:00'}`;
+      const endTimeString = `${t.submissionDate}T${t.submissionHour?.replace('59', '59:59') || '23:59:59'}`;      addEvent({
         id: t.assignmentCode,
         title: `${EVENT_ICONS.task} Due: ${t.assignmentName}`,
-        start: `${t.submissionDate}T${t.submissionHour || '23:59'}`,
+        start: startTimeString,
+        end: endTimeString,
         allDay: false,
         extendedProps: { ...t, type: 'task' }
       });
@@ -140,9 +143,15 @@ export const getAllVisibleEvents = async (currentUser = null) => {
       if (year.startDate) {
         addEvent({ id: `y-start-${year.yearCode}`, title: `${EVENT_ICONS.yearMarker} Year ${year.yearNumber} Starts`, start: year.startDate, allDay: true, display: 'block', extendedProps: { ...year, type: 'yearMarker' } });
       }
+      if (year.endDate) {
+        addEvent({ id: `y-end-${year.yearCode}`, title: `${EVENT_ICONS.yearMarker} Year ${year.yearNumber} Ends`, start: year.endDate, allDay: true, display: 'block', extendedProps: { ...year, type: 'yearMarker' } });
+      }
       (year.semesters || []).forEach(semester => {
         if (semester.startDate) {
           addEvent({ id: `s-start-${semester.semesterCode}`, title: `${EVENT_ICONS.semesterMarker} Sem. ${semester.semesterNumber} (${year.yearNumber}) Starts`, start: semester.startDate, allDay: true, display: 'block', extendedProps: { ...semester, type: 'semesterMarker', yearCode: year.yearCode } });
+        }
+        if (semester.endDate) {
+          addEvent({ id: `s-end-${semester.semesterCode}`, title: `${EVENT_ICONS.semesterMarker} Sem. ${semester.semesterNumber} (${year.yearNumber}) Ends`, start: semester.endDate, allDay: true, display: 'block', extendedProps: { ...semester, type: 'semesterMarker', yearCode: year.yearCode } });
         }
       });
     });
@@ -240,12 +249,14 @@ export const fetchEventsForAI = async (currentUser, startDate, endDate) => {
     (rawTasks || []).forEach(t => {
       if (!t.submissionDate) return;
       const eventStart = parseISO(`${t.submissionDate}T${t.submissionHour || '23:59'}`);
+      const startTimeString = `${t.submissionDate}T${t.submissionHour || '23:59:00'}`;
+      const endTimeString = `${t.submissionDate}T${t.submissionHour?.replace('59', '59:59') || '23:59:59'}`;
       if (isWithinInterval(eventStart, filterInterval)) {
         AIEvents.push({
           type: 'מטלה להגשה', // "Task"
           title: t.assignmentName,
-          start: eventStart.toISOString(),
-          end: eventStart.toISOString(),
+          start: startTimeString.toISOString(),
+          end: endTimeString.toISOString(),
           details: `קורס: ${t.courseCode}. ${t.notes || 'אין הערות נוספות.'}`
         });
       }
