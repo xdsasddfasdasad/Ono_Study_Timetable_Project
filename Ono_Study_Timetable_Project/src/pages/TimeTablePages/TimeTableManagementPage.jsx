@@ -152,8 +152,8 @@ export default function TimeTableManagementPage() {
                 open={activeModal === 'courseMeetings'}
                 onClose={handleCloseModals}
                 onSaveSuccess={handleSaveSuccess}
-                // existingCourses={allCourses}
-                // isLoadingCourses={isLoadingCourses}
+                 existingCourses={allCourses}
+                 isLoadingCourses={isLoadingCourses}
                 initialCourseCode={modalData?.courseCode}
                 initialMeetingId={modalData?.id}
             />

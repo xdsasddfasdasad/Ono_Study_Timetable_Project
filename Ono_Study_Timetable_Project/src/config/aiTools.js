@@ -5,27 +5,52 @@ export const tools = [
     functionDeclarations: [
       {
         name: "getCalendarEvents",
-        description: "אחזר אירועים מלוח השנה של הסטודנט עבור טווח תאריכים נתון. זה כולל קורסים, חגים, חופשות, אירועים כלליים, משימות להגשה ואירועים אישיים שהסטודנט יצר.",
+        description: "אחזר את כל סוגי האירועים מלוח השנה של הסטודנט (שיעורים, חגים, חופשות, אירועים כלליים, משימות ואירועים אישיים) עבור טווח תאריכים נתון.",
         parameters: {
           type: "OBJECT",
           properties: {
             startDate: {
               type: "STRING",
-              format: "DATE",
-              description: "תאריך ההתחלה לחיפוש האירועים, בפורמט YYYY-MM-DD.",
+              // ✨ FIX: Remove the 'format' property
+              // format: "DATE", 
+              description: "תאריך ההתחלה לחיפוש, בפורמט YYYY-MM-DD.",
             },
             endDate: {
               type: "STRING",
-              format: "DATE",
-              description: "תאריך הסיום לחיפוש האירועים, בפורמט YYYY-MM-DD.",
+              // ✨ FIX: Remove the 'format' property
+              // format: "DATE",
+              description: "תאריך הסיום לחיפוש, בפורמט YYYY-MM-DD.",
             },
           },
           required: ["startDate", "endDate"],
         },
       },
-      // בעתיד נוכל להוסיף כלים נוספים כמו:
-      // { name: "getLecturerInfo", description: "קבל פרטים על מרצה לפי שם", ... }
-      // { name: "findEmptyClassroom", description: "מצא כיתה פנויה בזמן נתון", ... }
+      {
+        name: "getStudentCourses",
+        description: "אחזר את רשימת הקורסים שאליהם הסטודנט רשום לסמסטר ספציפי. אם לא מצוין סמסטר, הפונקציה תחזיר את הקורסים לסמסטר הנוכחי.",
+        parameters: {
+            type: "OBJECT",
+            properties: {
+                semesterCode: {
+                    type: "STRING",
+                    description: "קוד הסמסטר (לדוגמה, 'S24A'). זהו פרמטר אופציונלי.",
+                },
+            },
+        },
+      },
+      {
+        name: "getCourseDefinitions",
+        description: "אחזר רשימה של כל הגדרות הקורס הקיימות במערכת, עם אפשרות לסינון לפי סמסטר.",
+        parameters: {
+            type: "OBJECT",
+            properties: {
+                semesterCode: {
+                    type: "STRING",
+                    description: "קוד סמסטר אופציונלי לסינון (לדוגמה, 'S25A'). אם לא יסופק, יוחזרו כל הקורסים.",
+                },
+            },
+        },
+      },
     ],
   },
 ];

@@ -2,7 +2,7 @@ import {
     setDocument, updateDocument, deleteDocument,
     saveSemesterInYear, deleteSemesterFromYear,
     saveRoomInSite, deleteRoomFromSite,
-    fetchCollectionWithQuery, performBatchWrites
+    fetchCollectionWithQuery, performBatchWrites, fetchCollection
 } from "../firebase/firestoreService";
 import { where } from "firebase/firestore";
 import { validateFormByType } from "../utils/validateForm";
@@ -51,9 +51,19 @@ export const handleSaveOrUpdateRecord = async (entityKey, formData, mode, option
         const { recordType, primaryKeyField, collectionName } = opDetails;
 
         console.log(`[Handler:Save] Details: type=${recordType}, pk=${primaryKeyField}, collection=${collectionName}`);
+        let extraValidationOptions = { ...options };
+
+        // ✨ FIX: If validating a course meeting, fetch the semester data first
+        if (recordType === 'courseMeeting' && formData.semesterCode) {
+            const years = await fetchCollection("years");
+            const parentSemester = years.flatMap(y => y.semesters || []).find(s => s.semesterCode === formData.semesterCode);
+            if (parentSemester) {
+                extraValidationOptions.parentSemester = parentSemester;
+            }
+        }
 
         // --- שלב 1: ולידציה ---
-        const validationErrors = await validateFormByType(recordType, formData, { mode, editingId });
+        const validationErrors = await validateFormByType(recordType, formData, extraValidationOptions);
         if (Object.keys(validationErrors).length > 0) {
             throw { validationErrors, message: "Validation failed. Please check the form fields." };
         }

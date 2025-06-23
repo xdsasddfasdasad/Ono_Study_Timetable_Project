@@ -37,9 +37,14 @@ export default function CourseForm({
   };
 
   const addHourSlot = () => {
-    const newHours = [...(formData.hours || []), { day: '', start: '', end: '' }];
-    onChange({ target: { name: 'hours', value: newHours } });
-  };
+        const newHours = [...(formData.hours || []), { 
+            day: '', 
+            start: '', 
+            end: '', 
+            _key: `slot_${Date.now()}` 
+        }];
+        onChange({ target: { name: 'hours', value: newHours } });
+    };
 
   const removeHourSlot = (index) => {
     const newHours = (formData.hours || []).filter((_, i) => i !== index);
@@ -124,8 +129,7 @@ export default function CourseForm({
         {getError('hours') && <Alert severity="error" sx={{ mt: 1, mb: 1 }} size="small">{getError('hours')}</Alert>}
         <Stack spacing={1.5} mt={1}>
             {(formData.hours || []).map((hourSlot, index) => (
-                 <Grid container spacing={1} key={index} alignItems="center">
-                    <Grid item xs={12} sm={4} md={3}>
+                        <Grid container spacing={1} key={hourSlot._key || index} alignItems="center">                    <Grid item xs={12} sm={4} md={3}>
                          <FormControl fullWidth error={!!getError('day', index)} size="small" required>
                              <InputLabel id={`hour-day-label-${index}`} shrink={!!hourSlot.day}>Day</InputLabel>
                              <Select labelId={`hour-day-label-${index}`} label="Day" name="day" value={hourSlot.day || ""} onChange={(e) => handleHourChange(index, 'day', e.target.value)} >

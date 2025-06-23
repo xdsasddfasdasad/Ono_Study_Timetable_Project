@@ -123,10 +123,23 @@ export default function ManageCourseDefinitionModal({
           : eventOrData;
 
         setFormData((prev) => ({ ...prev, [name]: value }));
-        if (errors[name]) {
-            setErrors(prev => { const newErrors = {...prev}; delete newErrors[name]; return newErrors; });
-        }
-    }, [errors]);
+        setErrors(prevErrors => {
+            const newErrors = { ...prevErrors };
+            // Clear top-level errors as before
+            if (newErrors[name]) {
+                delete newErrors[name];
+            }
+            // If the changed field is 'hours', check for nested errors to clear
+            if (name === 'hours' && Array.isArray(value)) {
+                Object.keys(newErrors).forEach(key => {
+                    if (key.startsWith('hours[')) {
+                        delete newErrors[key];
+                    }
+                });
+            }
+            return newErrors;
+        });
+        }, []);
 
     const handleSave = useCallback(async () => {
         if (!formData || mode === 'select') return;

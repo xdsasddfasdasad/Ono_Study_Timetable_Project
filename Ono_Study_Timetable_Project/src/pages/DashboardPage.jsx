@@ -30,16 +30,20 @@ import QueryStatsIcon from '@mui/icons-material/QueryStats';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 
 // --- Constants & Helpers ---
+// ✨ FIX: The only change is here. All event types now have a defined style.
 const EVENT_STYLES = {
-  courseMeeting:    { color: '#3788d8', label: 'Course Meetings',     icon: <SchoolIcon fontSize="small"/> },
-  courseDefinition: { color: '#17a2b8', label: 'Course Definitions',  icon: <MenuBookIcon fontSize="small"/> },
-  studentEvent:     { color: '#ffc107', label: 'Personal Events',     icon: <EventIcon fontSize="small"/> },
+  courseMeeting:    { color: '#3788d8', label: 'Meetings',         icon: <SchoolIcon fontSize="small"/> },
+  studentEvent:     { color: '#ffc107', label: 'Personal',         icon: <EventIcon fontSize="small"/> },
   holiday:          { color: '#e3342f', label: 'Holidays',           icon: <HelpOutlineIcon fontSize="small"/> },
   vacation:         { color: '#f6993f', label: 'Vacations',          icon: <HelpOutlineIcon fontSize="small"/> },
   event:            { color: '#38c172', label: 'General Events',     icon: <EventIcon fontSize="small"/> },
   task:             { color: '#8e44ad', label: 'Tasks',              icon: <TaskAltIcon fontSize="small"/> },
+  yearMarker:       { color: '#a5d6a7', label: 'Year Markers',       icon: <SettingsIcon fontSize="small"/> },
+  semesterMarker:   { color: '#81d4fa', label: 'Semester Markers',   icon: <SettingsIcon fontSize="small"/> },
+  courseDefinition: { color: '#17a2b8', label: 'Course Definitions', icon: <MenuBookIcon fontSize="small"/> },
   default:          { color: '#6c757d', label: 'Other',              icon: <HelpOutlineIcon fontSize="small"/> }
 };
+
 const getEventStyle = (type) => EVENT_STYLES[type] || EVENT_STYLES.default;
 const toValidDate = (dateInput) => {
   if (!dateInput) return null;
@@ -98,6 +102,7 @@ export default function DashboardPage() {
     const upcomingTasks = relevantTasks.filter(t => { const d = toValidDate(t.submissionDate); return d && isWithinInterval(d, upInterval); }).sort((a, b) => compareAsc(toValidDate(a.submissionDate), toValidDate(b.submissionDate))).slice(0, 10);
 
     // --- Pie Chart Data (based on upcoming events) ---
+    // This logic is now correct because EVENT_STYLES is complete.
     const pieCounts = upcomingEvents.reduce((acc, e) => { const type = e.extendedProps?.type || 'default'; acc[type] = (acc[type] || 0) + 1; return acc; }, {});
     const pieChartData = Object.entries(pieCounts).map(([type, count]) => ({ name: getEventStyle(type).label, value: count, fill: getEventStyle(type).color }));
 
@@ -168,7 +173,7 @@ export default function DashboardPage() {
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={4}><Paper elevation={2} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}><Stack direction="row" spacing={1} alignItems="center" mb={1.5}><EventIcon color="action" /><Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Events</Typography></Stack><Box sx={{ flexGrow: 1, overflow: 'auto', maxHeight: 250 }}>{upcomingEvents.length > 0 ? (<List dense disablePadding>{upcomingEvents.map(e => (<ListItem key={e.id} dense><ListItemText primary={e.title} secondary={format(toValidDate(e.start), 'eeee, HH:mm')} /></ListItem>))}</List>) : (<Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>No upcoming events.</Typography>)}</Box></Paper></Grid>
         <Grid item xs={12} md={4}><Paper elevation={2} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}><Stack direction="row" spacing={1} alignItems="center" mb={1.5}><TaskAltIcon color="action" /><Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Tasks</Typography></Stack><Box sx={{ flexGrow: 1, overflow: 'auto', maxHeight: 250 }}>{upcomingTasks.length > 0 ? (<List dense disablePadding>{upcomingTasks.map(t => (<ListItem key={t.taskCode || t.id} dense><ListItemText primary={t.title || t.assignmentName} secondary={`Due: ${format(toValidDate(t.submissionDate), 'eeee, MMM d')}`} /></ListItem>))}</List>) : (<Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>No upcoming tasks.</Typography>)}</Box></Paper></Grid>
-        <Grid item xs={12} md={4}><Paper elevation={2} sx={{ p: 2, height: '100%' }}><Stack direction="row" spacing={1} alignItems="center" mb={1.5}><AssessmentIcon color="action" /><Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Upcoming Breakdown</Typography></Stack>{pieChartData.length > 0 ? (<Box sx={{ height: 250 }}><ResponsiveContainer width="100%" height="100%"><PieChart margin={{ top: 5, right: 5, bottom: 5, left: 5 }}><Pie data={pieChartData} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={50} outerRadius={75} label={false}>{pieChartData.map(entry => (<Cell key={`cell-${entry.name}`} fill={entry.fill} />))}</Pie><RechartsTooltip /><Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} /></PieChart></ResponsiveContainer></Box>) : (<Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>No upcoming events to display.</Typography>)}</Paper></Grid>
+        <Grid item xs={12} md={4}><Paper elevation={2} sx={{ p: 2, height: '100%' }}><Stack direction="row" spacing={1} alignItems="center" mb={1.5}><AssessmentIcon color="action" /><Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Upcoming Breakdown</Typography></Stack>{pieChartData.length > 0 ? (<Box sx={{ height: 250 }}><ResponsiveContainer width="100%" height="100%"><PieChart margin={{ top: 5, right: 5, bottom: 5, left: 5 }}><Pie data={pieChartData} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={50} outerRadius={75} label={false}>{pieChartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.fill} />))}</Pie><RechartsTooltip /><Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} /></PieChart></ResponsiveContainer></Box>) : (<Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>No upcoming events to display.</Typography>)}</Paper></Grid>
       </Grid>
       
       <Paper elevation={2} sx={{ p: 2, mt: 4 }}>

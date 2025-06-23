@@ -1,63 +1,154 @@
 // src/components/agent/AIFunctionHandler.jsx
 
-// ⬇️ שלב 1: ייבוא הפונקציה החדשה והייעודית מהקובץ 'getAllVisibleEvents.js'.
-// שינינו את שם הפונקציה המיובאת ל-fetchEventsForAI.
 import { fetchEventsForAI } from '../../utils/getAllVisibleEvents';
+import { fetchStudentCoursesForSemester, queryCourses } from '../../utils/academicInfoService';
+import { format, parseISO } from 'date-fns';
+import { he } from 'date-fns/locale'; // ייבוא הלוקליזציה העברית
 
-// זו לא קומפוננטה של ריאקט, אלא פונקציית שירות שמתרגמת בקשות AI לפעולות במערכת.
-// היא מקבלת את בקשת הכלי מ-Gemini ומחזירה פונקציה שממתינה ל-currentUser.
-export const handleAIFunctionCall = async (toolCall) => {
-    
-    const functionName = toolCall.functionCall.name;
-    const args = toolCall.functionCall.args;
+// מילון תרגום לסוגי אירועים
+const eventTypeTranslation = {
+    courseMeeting: 'מפגש קורס',
+    studentEvent: 'אירוע אישי',
+    holiday: 'חג',
+    vacation: 'חופשה',
+    event: 'אירוע כללי',
+    task: 'מטלה להגשה',
+    yearMarker: 'ציון שנת לימודים',
+    semesterMarker: 'ציון סמסטר',
+    course: 'קורס',
+    default: 'אחר'
+};
+const translateEventType = (type) => eventTypeTranslation[type] || eventTypeTranslation.default;
 
-    console.log(`[AIFunctionHandler] AI is requesting to call function: '${functionName}' with arguments:`, args);
-
-    // תבנית זו (Currying) מאפשרת לנו להפריד בין קבלת בקשת ה-AI
-    // לבין קבלת המידע על המשתמש המחובר, שזמין רק בקומפוננטה.
-    const callFunction = async (currentUser) => {
-        // בדיקת בטיחות: ודא שהמשתמש מחובר לפני ביצוע פעולות רגישות.
-        if (!currentUser) {
-            console.error("[AIFunctionHandler] Error: Cannot execute function call, user is not logged in.");
-            return { tool: toolCall, output: { error: "User not logged in. Please log in to get personal data." }};
+// פונקציית עזר חדשה לעיצוב פרטי אירוע
+const formatEventDetailsToString = (event) => {
+    let details = [];
+    try {
+        if (event.allDay) {
+            details.push("אירוע של יום שלם");
+        } else if (event.start) {
+            const startTime = format(parseISO(event.start), 'HH:mm');
+            const endTime = event.end ? format(parseISO(event.end), 'HH:mm') : '';
+            if (startTime && endTime && startTime !== endTime) {
+                details.push(`שעות: ${startTime} - ${endTime}`);
+            } else if (startTime) {
+                details.push(`שעה: ${startTime}`);
+            }
         }
-
-        // ודא שהפרמטרים הנדרשים (שהוגדרו ב-aiTools.js) אכן הגיעו.
-        if (functionName === 'getCalendarEvents' && (!args.startDate || !args.endDate)) {
-            console.error("[AIFunctionHandler] Error: Missing startDate or endDate for getCalendarEvents.");
-            return { tool: toolCall, output: { error: "Missing required date parameters to fetch events." }};
-        }
-
-        switch (functionName) {
-            case 'getCalendarEvents':
-                try {
-                    console.log(`[AIFunctionHandler] Executing 'fetchEventsForAI' for user: ${currentUser.uid}`);
-                    
-                    // ⬇️ שלב 2: שימוש בפונקציה החדשה והיעילה.
-                    // הפונקציה 'fetchEventsForAI' כבר מסננת לפי תאריכים ומחזירה פורמט פשוט.
-                    // היא גם מחזירה את התוצאה עטופה באובייקט { events: [...] } או { error: "..." }.
-                    const result = await fetchEventsForAI(currentUser, args.startDate, args.endDate);
-
-                    // ⬇️ שלב 3: החזרת התוצאה ישירות, כפי שהיא, ל-Gemini.
-                    return { tool: toolCall, output: result };
-                } catch (error) {
-                    console.error("[AIFunctionHandler] Error executing 'fetchEventsForAI':", error);
-                    return { tool: toolCall, output: { error: error.message } };
-                }
-
-            // ניתן להוסיף כאן case-ים נוספים עבור כלים עתידיים, למשל:
-            // case 'getLecturerInfo':
-            //   const lecturerData = await fetchLecturerByName(args.lecturerName);
-            //   return { tool: toolCall, output: { data: lecturerData } };
-            // ...
-
-            default:
-                console.warn(`[AIFunctionHandler] Unknown function call received from AI: ${functionName}`);
-                return { tool: toolCall, output: { error: `The function '${functionName}' is not recognized by the system.` } };
-        }
+    } catch (e) {
+        console.warn("Could not format time for event:", event, e);
     }
     
-    // הפונקציה הראשית מחזירה את הפונקציה הפנימית.
-    // הקומפוננטה שקראה ל-handleAIFunctionCall תקרא לפונקציה המוחזרת עם currentUser.
-    return callFunction;
+    switch (event.type) {
+        case 'courseMeeting':
+            if (event.lecturerName) details.push(`מרצה: ${event.lecturerName}`);
+            if (event.roomName) details.push(`מיקום: ${event.roomName}${event.siteName ? ` (${event.siteName})` : ''}`);
+            if (event.zoomMeetinglink) details.push("קישור לזום זמין");
+            break;
+        case 'task':
+            if (event.courseName) details.push(`קורס: ${event.courseName}`);
+            else if (event.courseCode) details.push(`קורס: ${event.courseCode}`);
+            break;
+    }
+
+    if (event.notes) details.push(`הערות: ${event.notes}`);
+    return details.length > 0 ? ` (${details.join(' | ')})` : '';
+};
+
+
+export const handleAIFunctionCall = async (toolCall, currentUser) => {
+    const functionName = toolCall.name;
+    const args = toolCall.args;
+
+    if (!currentUser) return { error: "User not logged in." };
+
+    switch (functionName) {
+        case 'getCalendarEvents':
+            try {
+                const result = await fetchEventsForAI(currentUser, args.startDate, args.endDate);
+                if (result.error) return { error: result.error };
+
+                if (result.events && result.events.length > 0) {
+                    
+                    // ✨ FIX: Restore the grouping-by-date logic
+                    const groupedByDate = result.events.reduce((acc, event) => {
+                        const dateKey = format(parseISO(event.start), 'yyyy-MM-dd');
+                        if (!acc[dateKey]) acc[dateKey] = [];
+                        acc[dateKey].push(event);
+                        return acc;
+                    }, {});
+
+                    let responseText = `מצאתי ${result.events.length} אירועים עבורך בין ${args.startDate} ל-${args.endDate}:\n\n`;
+                    
+                    // Sort the dates chronologically and build the response
+                    Object.keys(groupedByDate).sort().forEach(dateKey => {
+                        // Format the date as a header, e.g., "יום ראשון, 22 ביוני 2025"
+                        const formattedDate = format(parseISO(dateKey), "EEEE, d 'ב'MMMM yyyy", { locale: he });
+                        responseText += `**${formattedDate}**:\n`;
+                        
+                        // Add each event for that day
+                        groupedByDate[dateKey].forEach(event => {
+                            const eventTypeString = `[${translateEventType(event.type)}]`;
+                            responseText += `- ${eventTypeString} ${event.title || 'ללא שם'}${formatEventDetailsToString(event)}\n`;
+                        });
+                        
+                        responseText += "\n"; // Add a space after each day's events
+                    });
+                    
+                    return { content: responseText };
+                } else {
+                    return { content: `לא מצאתי אירועים רשומים עבורך בין ${args.startDate} ל-${args.endDate}.` };
+                }
+            } catch (error) {
+                return { error: `Error fetching events: ${error.message}` };
+            }
+
+        case 'getStudentCourses':
+             try {
+                const result = await fetchStudentCoursesForSemester(currentUser, args.semesterCode);
+                if (result.error) {
+                    return { error: result.error };
+                }
+                if (result.courses && result.courses.length > 0) {
+                    let responseText = `בסמסטר ${result.semesterCode || 'הנוכחי'}, את/ה רשום/ה ל-${result.count} קורסים:\n`;
+                    result.courses.forEach(course => {
+                        responseText += `- ${course.courseName} (קוד: ${course.courseCode})\n`;
+                    });
+                    // ✨ FIX: Return ONLY the content object
+                    return { content: responseText };
+                } else {
+                    return { content: `לא נמצאו קורסים המשויכים אלייך לסמסטר ${result.semesterCode || 'הנוכחי'}.` };
+                }
+             } catch (error) {
+                return { error: `Error fetching courses: ${error.message}` };
+             }
+            
+        case 'getCourseDefinitions':
+            try {
+                // The 'queryCourses' function already supports filtering by semesterCode
+                const result = await queryCourses({ semesterCode: args.semesterCode });
+                if (result.error) {
+                    return { error: result.error };
+                }
+
+                if (result.courses && result.courses.length > 0) {
+                    let responseText = `מצאתי ${result.count} הגדרות קורס`;
+                    if (args.semesterCode) {
+                        responseText += ` עבור סמסטר ${args.semesterCode}`;
+                    }
+                    responseText += ':\n';
+                    result.courses.forEach(course => {
+                        responseText += `- ${course.courseName} (קוד: ${course.courseCode})\n`;
+                    });
+                    return { content: responseText };
+                } else {
+                    return { content: `לא מצאתי הגדרות קורס עבור הקריטריונים שצוינו.` };
+                }
+            } catch (error) {
+                return { error: `Error fetching course definitions: ${error.message}` };
+            }
+            
+        default:
+            return { error: `Function '${functionName}' is not recognized.` };
+    }
 };

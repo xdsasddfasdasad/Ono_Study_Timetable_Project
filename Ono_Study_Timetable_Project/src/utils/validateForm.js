@@ -228,20 +228,36 @@ export const validateCourseForm = async (formData, options = {}) => {
 
 export const validateCourseMeetingForm = async (formData, options = {}) => {
     const errors = {};
+    const { parentSemester } = options;
 
     if (!formData.title?.trim()) {
       errors.title = "Meeting title is required.";
     }
     if (!formData.start) {
       errors.start = "Start date and time are required.";
+    } else if (parentSemester) { // Only validate range if we have semester info
+        try {
+            const meetingStartDate = new Date(formData.start);
+            const semesterInterval = {
+                start: parseISO(parentSemester.startDate),
+                end: parseISO(parentSemester.endDate)
+            };
+            if (!isWithinInterval(meetingStartDate, semesterInterval)) {
+                errors.start = `Date must be within semester dates (${parentSemester.startDate} to ${parentSemester.endDate}).`;
+            }
+        } catch (e) {
+            errors.start = "Invalid date format for validation.";
+        }
     }
+
     if (!formData.end) {
       errors.end = "End date and time are required.";
     }
+
     if (formData.start && formData.end) {
         try {
-            const startDate = new Date(formData.start.toDate ? formData.start.toDate() : formData.start);
-            const endDate = new Date(formData.end.toDate ? formData.end.toDate() : formData.end);
+            const startDate = new Date(formData.start);
+            const endDate = new Date(formData.end);
             if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
                 throw new Error("Invalid date format detected.");
             }
@@ -253,6 +269,7 @@ export const validateCourseMeetingForm = async (formData, options = {}) => {
             errors.end = errors.end || "Invalid date format.";
         }
     }
+
     if (!formData.lecturerId) {
       errors.lecturerId = "Lecturer is required.";
     }

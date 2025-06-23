@@ -83,8 +83,8 @@ const CourseMeetingInstanceForm = React.memo(({
                             value={formData.lecturerId || ''} label="Lecturer" onChange={onChange}
                         >
                             <MenuItem value="" disabled><em>Select a lecturer...</em></MenuItem>
-                            {lecturers.map((option) => (
-                                <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                            {lecturers.map((option, index) => (
+                                <MenuItem key={`${option.value}-${index}`} value={option.value}>{option.label}</MenuItem>
                             ))}
                         </Select>
                         {errors.lecturerId && <FormHelperText>{errors.lecturerId}</FormHelperText>}
@@ -98,8 +98,8 @@ const CourseMeetingInstanceForm = React.memo(({
                             value={formData.roomCode || ''} label="Room" onChange={onChange}
                         >
                             <MenuItem value="" disabled><em>Select a room...</em></MenuItem>
-                            {rooms.map((option) => (
-                                <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                            {rooms.map((option, index) => (
+                                <MenuItem key={`${option.value}-${index}`} value={option.value}>{option.label}</MenuItem>
                             ))}
                         </Select>
                         {errors.roomCode && <FormHelperText>{errors.roomCode}</FormHelperText>}

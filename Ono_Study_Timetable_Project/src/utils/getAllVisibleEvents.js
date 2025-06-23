@@ -1,7 +1,12 @@
 // src/utils/getAllVisibleEvents.js
 
 import { fetchCollection } from '../firebase/firestoreService';
-import { addDays, parseISO, format } from 'date-fns';
+import { addDays, parseISO, format, isWithinInterval, max, min } from 'date-fns';
+
+const rangesOverlap = (startA, endA, startB, endB) => {
+  if (!startA || !endA || !startB || !endB) return false;
+  return startA <= endB && endA >= startB;
+};
 
 let lecturersMapCache = null;
 const getLecturersMap = async () => {
@@ -178,112 +183,102 @@ export const fetchEventsForAI = async (currentUser, startDate, endDate) => {
   console.log(`[fetchEventsForAI] Fetching events for AI. UID: ${userUID}, Range: ${startDate} to ${endDate}`);
 
   try {
-    const filterInterval = {
-        start: parseISO(startDate),
-        // הוספת יום אחד לטווח כדי לכלול את כל היום האחרון
-        end: addDays(parseISO(endDate), 1) 
-    };
-
-    // 1. Fetch all potentially relevant data
+    const filterInterval = { start: parseISO(startDate), end: addDays(parseISO(endDate), 1) };
+    
+    // ✨ FIX: Fetch ALL necessary collections, including courses and sites
     const [
       rawMeetings, rawGeneralEvents, rawHolidays, rawVacations, rawTasks,
-      allRawStudentEvents, lecturersMap,
+      allRawStudentEvents, lecturersMap, years, allCourses, allSites
     ] = await Promise.all([
       fetchCollection("coursesMeetings"), fetchCollection("events"),
       fetchCollection("holidays"), fetchCollection("vacations"),
       fetchCollection("tasks"), fetchCollection("studentEvents"),
-      getLecturersMap(),
+      getLecturersMap(), fetchCollection("years"), fetchCollection("courses"), fetchCollection("sites")
     ]);
 
+    const coursesMap = new Map((allCourses || []).map(c => [c.courseCode, c]));
+    const roomsMap = new Map((allSites || []).flatMap(s => (s.rooms || []).map(r => [r.roomCode, { ...r, siteName: s.siteName }])));
+
     const AIEvents = [];
-
-    // 2. Process and filter each type of event
     
-    // Course Meetings
     (rawMeetings || []).forEach(m => {
-      if (!m.start?.toDate) return;
-      const eventStart = m.start.toDate();
-      if (isWithinInterval(eventStart, filterInterval)) {
+      if (m.start?.toDate && isWithinInterval(m.start.toDate(), filterInterval)) {
+        const course = coursesMap.get(m.courseCode);
+        const room = roomsMap.get(m.roomCode);
         AIEvents.push({
-          type: 'שיעור', // "Course Meeting"
-          title: m.title || m.courseName,
-          start: eventStart.toISOString(),
-          end: m.end?.toDate ? m.end.toDate().toISOString() : eventStart.toISOString(),
-          details: `מרצה: ${lecturersMap.get(m.lecturerId) || 'לא ידוע'}. קוד קורס: ${m.courseCode}`
+            ...m, type: 'courseMeeting',
+            start: m.start.toDate().toISOString(),
+            end: m.end?.toDate ? m.end.toDate().toISOString() : m.start.toDate().toISOString(),
+            title: course?.courseName || m.title,
+            lecturerName: lecturersMap.get(m.lecturerId) || null,
+            roomName: room?.roomName,
+            siteName: room?.siteName,
         });
       }
     });
 
-    // General Events
     (rawGeneralEvents || []).forEach(e => {
-        if (!e.startDate) return;
-        const eventStart = parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`);
-        if (isWithinInterval(eventStart, filterInterval)) {
+        if (e.startDate && isWithinInterval(parseISO(e.startDate), filterInterval)) {
             AIEvents.push({
-                type: 'אירוע מערכת', // "General Event"
+                ...e,
+                type: 'event',
                 title: e.eventName,
-                start: eventStart.toISOString(),
-                end: e.endDate ? parseISO(e.allDay ? e.endDate : `${e.endDate}T${e.endHour}`).toISOString() : eventStart.toISOString(),
-                details: e.notes || `אירוע של יום שלם: ${e.allDay ? 'כן' : 'לא'}`
+                start: parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`).toISOString(),
+                end: e.endDate ? parseISO(e.allDay ? e.endDate : `${e.endDate || e.startDate}T${e.endHour}`).toISOString() : parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`).toISOString(),
             });
         }
     });
 
-    // Holidays and Vacations
-    [...rawHolidays, ...rawVacations].forEach(h => {
-        if (!h.startDate || !h.endDate) return;
-        const holidayInterval = { start: parseISO(h.startDate), end: addDays(parseISO(h.endDate), 1) };
-        // Check if the holiday interval overlaps with the filter interval
-        if (max([filterInterval.start, holidayInterval.start]) < min([filterInterval.end, holidayInterval.end])) {
-            AIEvents.push({
-                type: h.holidayName ? 'חג' : 'חופשה', // "Holiday" or "Vacation"
-                title: h.holidayName || h.vacationName,
-                start: holidayInterval.start.toISOString(),
-                end: parseISO(h.endDate).toISOString(),
-                details: h.notes || `נמשך כל היום.`
-            });
+[...(rawHolidays || []), ...(rawVacations || [])].forEach(h => {
+        if (h.startDate && h.endDate) {
+          const itemStart = parseISO(h.startDate);
+          const itemEnd = parseISO(h.endDate);
+          // Now the rangesOverlap function exists and can be called
+          if (rangesOverlap(itemStart, itemEnd, filterInterval.start, filterInterval.end)) {
+            AIEvents.push({ ...h, type: h.holidayName ? 'holiday' : 'vacation', title: h.holidayName || h.vacationName, allDay: true, start: itemStart.toISOString(), end: itemEnd.toISOString() });
+          }
         }
     });
     
-    // Tasks
     (rawTasks || []).forEach(t => {
-      if (!t.submissionDate) return;
-      const eventStart = parseISO(`${t.submissionDate}T${t.submissionHour || '23:59'}`);
-      const startTimeString = `${t.submissionDate}T${t.submissionHour || '23:59:00'}`;
-      const endTimeString = `${t.submissionDate}T${t.submissionHour?.replace('59', '59:59') || '23:59:59'}`;
-      if (isWithinInterval(eventStart, filterInterval)) {
-        AIEvents.push({
-          type: 'מטלה להגשה', // "Task"
-          title: t.assignmentName,
-          start: startTimeString.toISOString(),
-          end: endTimeString.toISOString(),
-          details: `קורס: ${t.courseCode}. ${t.notes || 'אין הערות נוספות.'}`
-        });
+      if (t.submissionDate && isWithinInterval(parseISO(t.submissionDate), filterInterval)) {
+        const course = coursesMap.get(t.courseCode);
+        AIEvents.push({ ...t, type: 'task', title: `Due: ${t.assignmentName}`, courseName: course?.courseName, start: parseISO(`${t.submissionDate}T${t.submissionHour || '23:59'}`).toISOString(), allDay: false });
       }
     });
 
-    // Personal Student Events (Filter by UID)
-    (allRawStudentEvents || [])
-      .filter(event => event.studentId === userUID)
-      .forEach(e => {
-        if (!e.startDate) return;
-        const eventStart = parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`);
-        if (isWithinInterval(eventStart, filterInterval)) {
-          AIEvents.push({
-            type: 'אירוע אישי', // "Personal Event"
-            title: e.eventName,
-            start: eventStart.toISOString(),
-            end: e.endDate ? parseISO(e.allDay ? e.endDate : `${e.endDate}T${e.endHour}`).toISOString() : eventStart.toISOString(),
-            details: e.notes || `אירוע של יום שלם: ${e.allDay ? 'כן' : 'לא'}`
-          });
+    (allRawStudentEvents || []).filter(e => e.studentId === userUID).forEach(e => {
+        if (e.startDate && isWithinInterval(parseISO(e.startDate), filterInterval)) {
+          const eventStart = parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`);
+          AIEvents.push({ ...e, type: 'studentEvent', title: e.eventName, start: eventStart.toISOString(), end: e.endDate ? parseISO(e.allDay ? e.endDate : `${e.endDate || e.startDate}T${e.endHour}`).toISOString() : eventStart.toISOString() });
         }
-      });
+    });
+    
+    (years || []).forEach(year => {
+        if (year.startDate && isWithinInterval(parseISO(year.startDate), filterInterval)) {
+            AIEvents.push({ ...year, type: 'yearMarker', title: `Year ${year.yearNumber} Starts`, start: year.startDate + "T00:00:00Z", allDay: true });
+        }
+        if (year.endDate && isWithinInterval(parseISO(year.endDate), filterInterval)) {
+            AIEvents.push({ ...year, type: 'yearMarker', title: `Year ${year.yearNumber} Ends`, start: year.endDate + "T00:00:00Z", allDay: true });
+        }
+        (year.semesters || []).forEach(semester => {
+            if (semester.startDate && isWithinInterval(parseISO(semester.startDate), filterInterval)) {
+                AIEvents.push({ ...semester, type: 'semesterMarker', title: `Semester ${semester.semesterNumber} (${year.yearNumber}) Starts`, start: semester.startDate + "T00:00:00Z", allDay: true });
+            }
+            if (semester.endDate && isWithinInterval(parseISO(semester.endDate), filterInterval)) {
+                AIEvents.push({ ...semester, type: 'semesterMarker', title: `Semester ${semester.semesterNumber} (${year.yearNumber}) Ends`, start: semester.endDate + "T00:00:00Z", allDay: true });
+            }
+        });
+    });
 
-    console.log(`[fetchEventsForAI] Returning ${AIEvents.length} events for the specified range.`);
-    return { events: AIEvents }; // החזרת אובייקט עם המפתח 'events' כפי שהגדרנו במטפל
+    if (AIEvents.length > 0) {
+        return { events: AIEvents };
+    } else {
+        return { events: [] };
+    }
 
   } catch (error) {
     console.error("[fetchEventsForAI] Critical error:", error);
-    return { error: `An error occurred while fetching events: ${error.message}` };
+    return { error: `An error occurred: ${error.message}` };
   }
 };
