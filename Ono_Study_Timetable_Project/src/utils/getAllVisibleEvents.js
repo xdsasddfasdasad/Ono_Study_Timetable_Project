@@ -176,16 +176,12 @@ export const getAllVisibleEvents = async (currentUser = null) => {
 export const fetchEventsForAI = async (currentUser, startDate, endDate) => {
   const userUID = currentUser?.uid;
   if (!userUID || !startDate || !endDate) {
-    console.error("[fetchEventsForAI] Missing required parameters: currentUser, startDate, or endDate.");
     return { error: "User, start date, and end date are required." };
   }
-
-  console.log(`[fetchEventsForAI] Fetching events for AI. UID: ${userUID}, Range: ${startDate} to ${endDate}`);
 
   try {
     const filterInterval = { start: parseISO(startDate), end: addDays(parseISO(endDate), 1) };
     
-    // ✨ FIX: Fetch ALL necessary collections, including courses and sites
     const [
       rawMeetings, rawGeneralEvents, rawHolidays, rawVacations, rawTasks,
       allRawStudentEvents, lecturersMap, years, allCourses, allSites
@@ -198,7 +194,6 @@ export const fetchEventsForAI = async (currentUser, startDate, endDate) => {
 
     const coursesMap = new Map((allCourses || []).map(c => [c.courseCode, c]));
     const roomsMap = new Map((allSites || []).flatMap(s => (s.rooms || []).map(r => [r.roomCode, { ...r, siteName: s.siteName }])));
-
     const AIEvents = [];
     
     (rawMeetings || []).forEach(m => {
@@ -220,20 +215,17 @@ export const fetchEventsForAI = async (currentUser, startDate, endDate) => {
     (rawGeneralEvents || []).forEach(e => {
         if (e.startDate && isWithinInterval(parseISO(e.startDate), filterInterval)) {
             AIEvents.push({
-                ...e,
-                type: 'event',
-                title: e.eventName,
-                start: parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`).toISOString(),
-                end: e.endDate ? parseISO(e.allDay ? e.endDate : `${e.endDate || e.startDate}T${e.endHour}`).toISOString() : parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`).toISOString(),
+                ...e, type: 'event', title: e.eventName, allDay: e.allDay,
+                start: parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour || '00:00'}`).toISOString(),
+                end: e.endDate ? parseISO(e.allDay ? e.endDate : `${e.endDate || e.startDate}T${e.endHour || '23:59'}`).toISOString() : parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour || '00:00'}`).toISOString(),
             });
         }
     });
 
-[...(rawHolidays || []), ...(rawVacations || [])].forEach(h => {
+    [...(rawHolidays || []), ...(rawVacations || [])].forEach(h => {
         if (h.startDate && h.endDate) {
           const itemStart = parseISO(h.startDate);
           const itemEnd = parseISO(h.endDate);
-          // Now the rangesOverlap function exists and can be called
           if (rangesOverlap(itemStart, itemEnd, filterInterval.start, filterInterval.end)) {
             AIEvents.push({ ...h, type: h.holidayName ? 'holiday' : 'vacation', title: h.holidayName || h.vacationName, allDay: true, start: itemStart.toISOString(), end: itemEnd.toISOString() });
           }
@@ -243,17 +235,37 @@ export const fetchEventsForAI = async (currentUser, startDate, endDate) => {
     (rawTasks || []).forEach(t => {
       if (t.submissionDate && isWithinInterval(parseISO(t.submissionDate), filterInterval)) {
         const course = coursesMap.get(t.courseCode);
-        AIEvents.push({ ...t, type: 'task', title: `Due: ${t.assignmentName}`, courseName: course?.courseName, start: parseISO(`${t.submissionDate}T${t.submissionHour || '23:59'}`).toISOString(), allDay: false });
+        const eventStart = parseISO(`${t.submissionDate}T${t.submissionHour || '23:59'}`);
+        AIEvents.push({ ...t, type: 'task', title: `Due: ${t.assignmentName}`, courseName: course?.courseName, start: eventStart.toISOString(), allDay: false });
       }
     });
 
     (allRawStudentEvents || []).filter(e => e.studentId === userUID).forEach(e => {
         if (e.startDate && isWithinInterval(parseISO(e.startDate), filterInterval)) {
           const eventStart = parseISO(e.allDay ? e.startDate : `${e.startDate}T${e.startHour}`);
-          AIEvents.push({ ...e, type: 'studentEvent', title: e.eventName, start: eventStart.toISOString(), end: e.endDate ? parseISO(e.allDay ? e.endDate : `${e.endDate || e.startDate}T${e.endHour}`).toISOString() : eventStart.toISOString() });
+          AIEvents.push({ ...e, type: 'studentEvent', title: e.eventName, allDay: e.allDay, start: eventStart.toISOString(), end: e.endDate ? parseISO(e.allDay ? e.endDate : `${e.endDate || e.startDate}T${e.endHour}`).toISOString() : eventStart.toISOString() });
         }
     });
     
+    // ✨ FIX: Add course definitions whose semester overlaps with the date range
+    const allSemesters = years.flatMap(y => y.semesters || []);
+    const relevantSemesters = allSemesters.filter(sem => {
+        const semStart = parseISO(sem.startDate);
+        const semEnd = parseISO(sem.endDate);
+        return rangesOverlap(semStart, semEnd, filterInterval.start, filterInterval.end);
+    });
+    const relevantSemesterCodes = new Set(relevantSemesters.map(s => s.semesterCode));
+
+    (allCourses || []).forEach(course => {
+        if (relevantSemesterCodes.has(course.semesterCode)) {
+            AIEvents.push({
+                ...course, type: 'course', title: course.courseName,
+                start: relevantSemesters.find(s => s.semesterCode === course.semesterCode).startDate + "T00:00:01Z", // For sorting
+                allDay: true,
+            });
+        }
+    });
+
     (years || []).forEach(year => {
         if (year.startDate && isWithinInterval(parseISO(year.startDate), filterInterval)) {
             AIEvents.push({ ...year, type: 'yearMarker', title: `Year ${year.yearNumber} Starts`, start: year.startDate + "T00:00:00Z", allDay: true });
@@ -271,11 +283,7 @@ export const fetchEventsForAI = async (currentUser, startDate, endDate) => {
         });
     });
 
-    if (AIEvents.length > 0) {
-        return { events: AIEvents };
-    } else {
-        return { events: [] };
-    }
+    return { events: AIEvents };
 
   } catch (error) {
     console.error("[fetchEventsForAI] Critical error:", error);
