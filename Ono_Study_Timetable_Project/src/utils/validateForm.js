@@ -171,24 +171,40 @@ export const validateLecturerForm = async (formData, options = {}) => {
   const errors = {};
   const editingId = options.editingId;
 
-  if (!formData.id?.trim()) { errors.id = "Lecturer ID is required."; }
+  // 🗑️ הוסר: הבדיקה if (!formData.id?.trim())
+  // הסיבה: עבור מרצה חדש, אין ID בטופס, וזה תקין.
+  // ה-ID נוצר על ידי Firestore.
 
-  if (!formData.name?.trim()) { errors.name = "Lecturer name is required."; }
-  else {
-      try {
-          const existingByName = await fetchDocumentsByQuery('lecturers', 'name', '==', formData.name.trim());
-          if (existingByName.some(doc => doc.id !== editingId)) { errors.name = "Lecturer name already exists."; }
-      } catch (e) { console.error("Lecturer name check failed:", e); errors.name = "Could not verify name uniqueness."; }
+  if (!formData.name?.trim()) {
+    errors.name = "Lecturer name is required.";
+  } else {
+    try {
+      const existingByName = await fetchDocumentsByQuery('lecturers', 'name', '==', formData.name.trim());
+      // הבדיקה לוודא שהשם לא קיים אצל מרצה אחר
+      if (existingByName.some(doc => doc.id !== editingId)) {
+        errors.name = "Lecturer name already exists.";
+      }
+    } catch (e) {
+      console.error("Lecturer name check failed:", e);
+      errors.name = "Could not verify name uniqueness.";
+    }
   }
 
   if (formData.email && formData.email.trim()) {
-      if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) { errors.email = "Invalid email format."; }
-      else {
-          try {
-              const existingByEmail = await fetchDocumentsByQuery('lecturers', 'email', '==', formData.email.trim());
-              if (existingByEmail.some(doc => doc.id !== editingId)) { errors.email = "Email already registered."; }
-          } catch (e) { console.error("Lecturer email check failed:", e); errors.email = "Could not verify email uniqueness."; }
+    if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) {
+      errors.email = "Invalid email format.";
+    } else {
+      try {
+        const existingByEmail = await fetchDocumentsByQuery('lecturers', 'email', '==', formData.email.trim());
+        // הבדיקה לוודא שהאימייל לא קיים אצל מרצה אחר
+        if (existingByEmail.some(doc => doc.id !== editingId)) {
+          errors.email = "Email already registered.";
+        }
+      } catch (e) {
+        console.error("Lecturer email check failed:", e);
+        errors.email = "Could not verify email uniqueness.";
       }
+    }
   }
   return errors;
 };
@@ -320,27 +336,38 @@ export const validateSiteForm = async (formData, options = {}) => {
 export const validateRoomForm = async (formData, options = {}) => {
     const errors = {};
     const parentSite = options.parentRecord;
-    const editingId = options.editingId;
+    // editingId יהיה null/undefined במצב 'new', ועם ערך במצב 'edit'
+    const editingId = options.editingId; 
 
-    if (!formData.roomCode?.trim()) { errors.roomCode = "Room code is required."; }
-    else if (parentSite?.rooms) {
-         const duplicateCode = parentSite.rooms.some(r =>
-              r.roomCode?.trim() === formData.roomCode?.trim() && r.roomCode !== editingId
-         );
-         if (duplicateCode) { errors.roomCode = "Room code already exists in this site."; }
+    // ✨ תיקון: הבדיקה על roomCode צריכה להתעלם מהחדר הנוכחי שאנחנו עורכים
+    if (!formData.roomCode?.trim()) {
+        errors.roomCode = "Room code is required.";
+    } else if (parentSite?.rooms) {
+        // ודא שהקוד לא שייך לחדר אחר באתר
+        const duplicateCode = parentSite.rooms.some(r =>
+             r.roomCode?.trim() === formData.roomCode?.trim() && r.roomCode !== editingId
+        );
+        if (duplicateCode) {
+            errors.roomCode = "Room code already exists in this site.";
+        }
     }
 
-    if (!formData.roomName?.trim()) { errors.roomName = "Room name is required."; }
-    else if (parentSite?.rooms) {
-         const duplicateName = parentSite.rooms.some(r =>
-              r.roomName?.trim().toLowerCase() === formData.roomName?.trim().toLowerCase() && r.roomCode !== editingId
-         );
-         if (duplicateName) { errors.roomName = "Room name already exists in this site."; }
+    if (!formData.roomName?.trim()) {
+        errors.roomName = "Room name is required.";
+    } else if (parentSite?.rooms) {
+        // ודא שהשם לא שייך לחדר אחר באתר
+        const duplicateName = parentSite.rooms.some(r =>
+             r.roomName?.trim().toLowerCase() === formData.roomName?.trim().toLowerCase() && r.roomCode !== editingId
+        );
+        if (duplicateName) {
+            errors.roomName = "Room name already exists in this site.";
+        }
     }
 
-    if (!formData.siteCode?.trim()) errors.siteCode = "Parent site code is required.";
-    else if (parentSite && formData.siteCode !== parentSite.siteCode) {
-         errors.siteCode = "Site code mismatch with parent record.";
+    if (!formData.siteCode?.trim()) {
+        errors.siteCode = "Parent site is required.";
+    } else if (parentSite && formData.siteCode !== parentSite.siteCode) {
+        errors.siteCode = "Site code mismatch with parent record.";
     }
 
     return errors;
