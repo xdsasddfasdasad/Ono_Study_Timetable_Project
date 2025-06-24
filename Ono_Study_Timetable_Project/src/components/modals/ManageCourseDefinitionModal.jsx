@@ -9,31 +9,47 @@ import { formMappings } from "../../utils/formMappings";
 import { handleSaveOrUpdateRecord, handleDeleteEntity } from "../../handlers/formHandlers";
 import { fetchCollection } from "../../firebase/firestoreService";
 
-const loadSelectOptions = async () => {
+// ✨ FIX: The entire loadSelectOptions function is replaced with this more robust version.
+const loadSelectOptions = async (allCourses = []) => {
     try {
         const [years, lecturers, sites] = await Promise.all([
             fetchCollection("years"), 
             fetchCollection("lecturers"), 
             fetchCollection("sites")
         ]);
-        const allSemesters = (years || [])
-            .flatMap(y => (y.semesters || []).map(s => ({ ...s, yearNumber: y.yearNumber })))
-            // ✨ FIX 1.3: Sort semesters here during generation
-            .sort((a, b) => {
-                const yearCompare = (a.yearNumber || '').localeCompare(b.yearNumber || '');
-                if (yearCompare !== 0) return yearCompare;
-                return (a.semesterNumber || '').localeCompare(b.semesterNumber || '');
-            })
-            .map(s => ({ value: s.semesterCode, label: `Sem ${s.semesterNumber} / Y${s.yearNumber}` }));
 
-        // You can sort lecturers and rooms too if needed
-        const allRooms = (sites || [])
-            .flatMap(site => (site.rooms || []).map(room => ({ value: room.roomCode, label: `${room.roomName} @ ${site.siteName}` })))
-            .sort((a, b) => a.label.localeCompare(b.label));
+        const semesterMap = new Map();
+
+        // 1. Load all semesters that are properly nested in years
+        (years || []).forEach(y => {
+            (y.semesters || []).forEach(s => {
+                if (s.semesterCode && !semesterMap.has(s.semesterCode)) {
+                    semesterMap.set(s.semesterCode, { 
+                        value: s.semesterCode, 
+                        label: `Sem ${s.semesterNumber} / Y${y.yearNumber}` 
+                    });
+                }
+            });
+        });
+
+        // 2. Ensure that any semesterCode attached to an existing course is also included,
+        //    even if it's "orphaned" (not yet in a year object).
+        (allCourses || []).forEach(course => {
+            if (course.semesterCode && !semesterMap.has(course.semesterCode)) {
+                // If the semester isn't in our map, add it with a generic label
+                semesterMap.set(course.semesterCode, {
+                    value: course.semesterCode,
+                    label: `Orphaned Semester (${course.semesterCode})` // This label indicates a data issue
+                });
+            }
+        });
         
-        const formattedLecturers = (lecturers || [])
-            .map(l => ({ value: l.id, label: `${l.name} (${l.id})` }))
-            .sort((a, b) => a.label.localeCompare(b.label));
+        // 3. Convert map to a sorted array
+        const allSemesters = Array.from(semesterMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+
+        // Sort lecturers and rooms
+        const allRooms = (sites || []).flatMap(site => (site.rooms || []).map(room => ({ value: room.roomCode, label: `${room.roomName} @ ${site.siteName}` }))).sort((a, b) => a.label.localeCompare(b.label));
+        const formattedLecturers = (lecturers || []).map(l => ({ value: l.id, label: `${l.name} (${l.id})` })).sort((a, b) => a.label.localeCompare(b.label));
 
         return { semesters: allSemesters, lecturers: formattedLecturers, rooms: allRooms };
     } catch (error) {
@@ -41,7 +57,6 @@ const loadSelectOptions = async () => {
         return { semesters: [], lecturers: [], rooms: [] };
     }
 };
-
 
 const ADD_NEW_COURSE_OPTION = "__addNewCourse__";
 const COURSE_RECORD_TYPE = 'course';
@@ -64,20 +79,24 @@ export default function ManageCourseDefinitionModal({
 
     useEffect(() => {
         if (open) {
-            setIsDataLoading(true); // תמיד התחל טעינה כשהמודאל נפתח
-            Promise.all([
-                fetchCollection("courses"),
-                loadSelectOptions()
-            ]).then(([courses, options]) => {
-                setInternalCourses(courses || []);
-                setSelectOptions(options);
-                setIsDataLoading(false); // סיים טעינה רק אחרי שכל הנתונים הגיעו
+            setIsDataLoading(true);
+            
+            // ✨ FIX: First fetch courses, then pass them to loadSelectOptions
+            fetchCollection("courses").then(coursesData => {
+                const courses = coursesData || [];
+                setInternalCourses(courses);
+
+                // Now load select options, providing the context of all existing courses
+                loadSelectOptions(courses).then(options => {
+                    setSelectOptions(options);
+                    setIsDataLoading(false); // Finish loading only after everything is ready
+                });
             }).catch(err => {
                 setApiError("Failed to load initial data.");
                 setIsDataLoading(false);
             });
         } else {
-            // איפוס מלא בסגירה
+            // Reset state on close
             setSelectedCourseCode("");
             setFormData(null);
             setMode("select");
@@ -85,17 +104,14 @@ export default function ManageCourseDefinitionModal({
             setApiError("");
             setIsLoading(false);
             setInternalCourses([]);
-            setIsDataLoading(true); // חשוב לאפס את מצב הטעינה
+            setIsDataLoading(true);
         }
     }, [open]);
 
-    // ✨ FIX: This effect now DEPENDS on isDataLoading and will WAIT for it to be false.
     useEffect(() => {
-        // Guard Clause: אם הנתונים עדיין בטעינה, אל תעשה כלום.
         if (isDataLoading) {
             return; 
         }
-
         setErrors({}); 
         setApiError("");
         
@@ -108,13 +124,11 @@ export default function ManageCourseDefinitionModal({
         } else if (selectedCourseCode) {
             setMode("edit");
             const courseData = internalCourses.find(c => c.courseCode === selectedCourseCode);
-            // אם לא מצאנו את הקורס (יכול לקרות במצב קיצון), נקה את הטופס
             setFormData(courseData ? { ...courseData } : null);
         } else {
             setMode("select");
-            setFormData(null); // נקה את הטופס אם שום דבר לא נבחר
+            setFormData(null);
         }
-    // ✨ FIX: Add `isDataLoading` to the dependency array.
     }, [selectedCourseCode, internalCourses, open, isDataLoading]);
 
     const handleFormChange = useCallback((eventOrData) => {
@@ -125,11 +139,9 @@ export default function ManageCourseDefinitionModal({
         setFormData((prev) => ({ ...prev, [name]: value }));
         setErrors(prevErrors => {
             const newErrors = { ...prevErrors };
-            // Clear top-level errors as before
             if (newErrors[name]) {
                 delete newErrors[name];
             }
-            // If the changed field is 'hours', check for nested errors to clear
             if (name === 'hours' && Array.isArray(value)) {
                 Object.keys(newErrors).forEach(key => {
                     if (key.startsWith('hours[')) {
@@ -139,7 +151,7 @@ export default function ManageCourseDefinitionModal({
             }
             return newErrors;
         });
-        }, []);
+    }, []);
 
     const handleSave = useCallback(async () => {
         if (!formData || mode === 'select') return;
@@ -205,7 +217,6 @@ export default function ManageCourseDefinitionModal({
                     </Select>
                 </FormControl>
 
-                {/* ✨ FIX: Conditional rendering logic simplified and more robust */}
                 {isDataLoading && mode !== 'select' && (
                      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
                 )}

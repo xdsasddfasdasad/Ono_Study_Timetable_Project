@@ -73,7 +73,9 @@ export default function EntitiesManageModal({ open, onClose, onSaveSuccess }) {
             setMode('edit');
             let collectionToSearch = [];
             if (entityType === 'room') {
-                collectionToSearch = (dataStore.sites || []).flatMap(s => s.rooms || []);
+                collectionToSearch = (dataStore.sites || []).flatMap(s => 
+                    (s.rooms || []).map(r => ({...r, siteCode: s.siteCode})) // Ensure siteCode is present
+                );
             } else {
                 const collectionName = `${entityType}s`;
                 collectionToSearch = dataStore[collectionName] || [];
@@ -92,7 +94,6 @@ export default function EntitiesManageModal({ open, onClose, onSaveSuccess }) {
         setFormData(null);
     };
 
-    // ✨ --- התיקון הקריטי שמאפשר עריכה תקינה --- ✨
     const handleFormChange = useCallback((event) => {
         const { name, value, type, checked } = event.target;
         const finalValue = type === 'checkbox' ? checked : value;
@@ -103,7 +104,7 @@ export default function EntitiesManageModal({ open, onClose, onSaveSuccess }) {
             delete newErrors[name];
             return newErrors;
         });
-    }, []); // מערך תלויות ריק הופך את הפונקציה ליציבה
+    }, []);
 
     const handleSave = useCallback(async () => {
         if (!formData || !entityType || !mode || mode === 'select') return;
@@ -206,8 +207,9 @@ export default function EntitiesManageModal({ open, onClose, onSaveSuccess }) {
                             <MenuItem value="__add_new__">--- Add New {entityType} ---</MenuItem>
                             <Divider />
                             {actionOptions.length === 0 && <MenuItem disabled><em>No items to edit.</em></MenuItem>}
-                            {actionOptions.map(opt => (
-                                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                            {/* ✨ FIX: Add the index to the key to ensure uniqueness */}
+                            {actionOptions.map((opt, index) => (
+                                <MenuItem key={`${opt.value}-${index}`} value={opt.value}>{opt.label}</MenuItem>
                             ))}
                         </Select>
                     </FormControl>
