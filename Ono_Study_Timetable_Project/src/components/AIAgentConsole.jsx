@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom'; // ייבוא הפונקציה ליצירת Portal
+import { createPortal } from 'react-dom';
 import { Box, Paper, Typography, IconButton, TextField, Button, CircularProgress, Stack } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
+import ReactMarkdown from 'react-markdown';
 
 import { useAuth } from '../context/AuthContext';
+// ✨ FIX: Import only the necessary functions
 import { sendMessageToAI } from '../services/geminiService';
 import { handleAIFunctionCall } from './agent/AIFunctionHandler';
 
-// רכיב פנימי להצגת רשימת ההודעות
 const MessageList = ({ messages }) => {
     const endOfMessagesRef = useRef(null);
-
     useEffect(() => {
         endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
@@ -31,9 +31,13 @@ const MessageList = ({ messages }) => {
                         borderRadius: msg.sender === 'user' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
                     }}
                 >
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
-                        {msg.text}
-                    </Typography>
+                    <Box sx={{
+                        '& p': { margin: 0 },
+                        '& h2, & h3, & h4': { marginTop: '1em', marginBottom: '0.5em' },
+                        '& ul, & ol': { paddingLeft: '20px' },
+                    }}>
+                        <ReactMarkdown>{msg.text}</ReactMarkdown>
+                    </Box>
                 </Paper>
             ))}
             <div ref={endOfMessagesRef} />
@@ -41,17 +45,19 @@ const MessageList = ({ messages }) => {
     );
 };
 
-
 export default function AIAgentConsole({ isOpen, onClose }) {
     const { currentUser } = useAuth();
+    // We no longer need the 'chat' state object
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
+        // Initialize with a welcome message when opened for a logged-in user
         if (isOpen && currentUser) {
             setMessages([{ sender: 'ai', text: `שלום ${currentUser.firstName}! שמי אוני, איך אני יכול לעזור?` }]);
         } else {
+            // Clear messages if closed or no user
             setMessages([]);
         }
     }, [currentUser, isOpen]);
@@ -61,18 +67,20 @@ export default function AIAgentConsole({ isOpen, onClose }) {
         if (!input.trim() || isLoading) return;
 
         const userMessageText = input;
-        const newMessages = [...messages, { sender: 'user', text: userMessageText }];
-        setMessages(newMessages);
+        // Add the user's message to the UI immediately
+        setMessages(prev => [...prev, { sender: 'user', text: userMessageText }]);
         setInput('');
         setIsLoading(true);
 
         console.group("--- AI Chat Turn ---");
         console.log("User Input:", userMessageText);
-
+        
         try {
-            const aiResponseText = await sendMessageToAI(newMessages, (toolCall) => handleAIFunctionCall(toolCall, currentUser));
+            // Call the service with ONLY the last user message text.
+            // The service itself will build the necessary context.
+            const aiResponseText = await sendMessageToAI(userMessageText, (toolCall) => handleAIFunctionCall(toolCall, currentUser));
             
-            console.log("AI Final Response:", aiResponseText);
+            console.log("Final response to be displayed:", aiResponseText);
             
             const aiMessage = { sender: 'ai', text: aiResponseText };
             setMessages(prev => [...prev, aiMessage]);
@@ -88,10 +96,9 @@ export default function AIAgentConsole({ isOpen, onClose }) {
     };
 
     if (!isOpen) {
-        return null; // אם החלון סגור, לא מרנדרים כלום
+        return null;
     }
 
-    // ה-JSX של חלון הצ'אט שאנחנו רוצים "לשגר"
     const consoleUI = (
         <Paper 
             elevation={8} 
@@ -102,11 +109,11 @@ export default function AIAgentConsole({ isOpen, onClose }) {
                 width: { xs: '90vw', sm: '380px' }, 
                 height: '500px', 
                 maxHeight: '70vh', 
-                zIndex: 1400, // z-index גבוה כדי שיהיה מעל הכל
+                zIndex: 1400,
                 borderRadius: '12px', 
                 display: 'flex', 
                 flexDirection: 'column', 
-                overflow: 'hidden', 
+                overflow: 'hidden',
                 transition: 'transform 0.3s ease-in-out, opacity 0.3s ease-in-out', 
                 transform: 'translateY(0)', 
                 opacity: 1 
@@ -148,5 +155,6 @@ export default function AIAgentConsole({ isOpen, onClose }) {
             </Box>
         </Paper>
     );
+
     return createPortal(consoleUI, document.body);
 }
