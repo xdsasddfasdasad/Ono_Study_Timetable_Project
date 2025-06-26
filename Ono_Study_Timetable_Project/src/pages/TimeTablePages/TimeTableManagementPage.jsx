@@ -1,16 +1,29 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { Button, Stack, CircularProgress, Typography, Box, Alert } from "@mui/material";
+import { Button, Stack, CircularProgress, Typography, Box, Alert, Skeleton, LinearProgress, Paper } from "@mui/material"; // ✨ 1. הוספת ייבוא
 
 // ייבוא כל המודאלים הנדרשים
 import FullCalendarView from "../../components/calendar/FullCalendarView";
 import TimeTableCalendarManageModal from "../../components/modals/TimeTableCalendarManageModal";
-import TimeTableEditModal from "../../components/modals/TimeTableEditModal"; // ייבוא שהיה חסר
+import TimeTableEditModal from "../../components/modals/TimeTableEditModal";
 import EntitiesManageModal from "../../components/modals/EntitiesManageModal";
 import ManageCourseDefinitionModal from "../../components/modals/ManageCourseDefinitionModal";
 import ManageCourseMeetingsModal from "../../components/modals/ManageCourseMeetingsModal";
 
 import { useEvents } from "../../context/EventsContext";
 import { fetchCollection } from "../../firebase/firestoreService";
+
+// ✨ 2. קומפוננטת עזר להצגת שלד של לוח השנה
+const CalendarSkeleton = () => (
+    <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', boxShadow: 1, p: 1 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" p={1}>
+            <Skeleton variant="text" width={100} />
+            <Skeleton variant="text" width={150} />
+            <Skeleton variant="text" width={100} />
+        </Stack>
+        <Divider />
+        <Skeleton variant="rectangular" height={600} />
+    </Box>
+);
 
 export default function TimeTableManagementPage() {
     // === STATE MANAGEMENT ===
@@ -44,14 +57,12 @@ export default function TimeTableManagementPage() {
         setModalData(null);
     }, []);
 
-    // ✨ Handler אחיד להצלחה, יועבר לכל מודאל בפרופ onSave
     const handleSaveSuccess = useCallback(() => {
         handleCloseModals();
         refreshEvents();
         loadCourseList();
     }, [refreshEvents, loadCourseList, handleCloseModals]);
     
-    // ✨ Handler לעריכה מהירה מתוך לוח השנה
     const handleEventClick = useCallback((clickInfo) => {
         const event = clickInfo.event;
         const props = event.extendedProps;
@@ -61,41 +72,22 @@ export default function TimeTableManagementPage() {
                 setModalData(props);
                 setActiveModal('courseMeetings');
                 break;
-            
-            // כל אירועי לוח השנה הניתנים לעריכה
-            case 'holiday':
-            case 'vacation':
-            case 'event':
-            case 'task':
-            case 'yearMarker':
-            case 'semesterMarker':
+            case 'holiday': case 'vacation': case 'event': case 'task': case 'yearMarker': case 'semesterMarker':
                 {
-                    // נכין את האובייקט המדויק עבור מודאל העריכה
                     let recordType = props.type;
                     if (props.type === 'yearMarker') recordType = 'year';
                     if (props.type === 'semesterMarker') recordType = 'semester';
-
-                    const dataForModal = {
-                        ...props,
-                        type: recordType, // ודא שה-type הנכון מועבר
-                        id: event.id,
-                        title: event.title,
-                        start: event.start,
-                        end: event.end,
-                        allDay: event.allDay,
-                    };
+                    const dataForModal = { ...props, type: recordType, id: event.id, title: event.title, start: event.start, end: event.end, allDay: event.allDay };
                     setModalData(dataForModal);
-                    setActiveModal('editEntry'); // פתיחת מודאל עריכה ישירה
+                    setActiveModal('editEntry');
                 }
                 break;
-
             default:
                 alert(`Cannot edit an event of type '${props?.type}' directly from the calendar.`);
                 break;
         }
     }, []);
 
-    // לחיצה על תאריך פותחת כעת את מודאל הניהול הכללי
     const handleDateClick = useCallback((dateClickInfo) => {
         setActiveModal('manageEntries');
     }, []);
@@ -105,19 +97,25 @@ export default function TimeTableManagementPage() {
 
     return (
         <Box sx={{ padding: { xs: "1rem", md: "2rem" }, maxWidth: "1500px", margin: "auto" }}>
-            <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 3 }}>Timetable Management Console</Typography>
+            <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 1 }}>Timetable Management Console</Typography>
+            
+            {/* ✨ 3. LinearProgress גלובלי לעמוד */}
+            <Box sx={{ height: 4, mb: 3 }}>
+                {isCurrentlyLoading && <LinearProgress />}
+            </Box>
+
             {eventsError && <Alert severity="error" sx={{ mb: 2 }}>{`Calendar data error: ${eventsError}`}</Alert>}
 
             <Stack direction="row" spacing={2} mb={3} justifyContent="center" flexWrap="wrap">
-                {/* ✨ כפתור זה פותח את מודאל הניהול הראשי */}
-                <Button variant="contained" onClick={() => setActiveModal('manageEntries')}>Manage Calendar Entries</Button>
-                <Button variant="contained" onClick={() => setActiveModal('courseDef')}>Manage Courses</Button>
-                <Button variant="contained" onClick={() => setActiveModal('courseMeetings')}>Manage Meetings</Button>
-                <Button variant="contained" onClick={() => setActiveModal('entities')}>Manage Entities</Button>
+                <Button variant="contained" onClick={() => setActiveModal('manageEntries')} disabled={isCurrentlyLoading}>Manage Calendar Entries</Button>
+                <Button variant="contained" onClick={() => setActiveModal('courseDef')} disabled={isCurrentlyLoading}>Manage Courses</Button>
+                <Button variant="contained" onClick={() => setActiveModal('courseMeetings')} disabled={isCurrentlyLoading}>Manage Meetings</Button>
+                <Button variant="contained" onClick={() => setActiveModal('entities')} disabled={isCurrentlyLoading}>Manage Entities</Button>
             </Stack>
 
-            {isCurrentlyLoading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}><CircularProgress /></Box>
+            {/* ✨ 4. לוגיקת תצוגה משופרת */}
+            {isCurrentlyLoading && adminCalendarEvents.length === 0 ? (
+                <CalendarSkeleton />
             ) : (
                 <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', boxShadow: 1, p: 1 }}>
                     <FullCalendarView events={adminCalendarEvents} onDateClick={handleDateClick} onEventClick={handleEventClick} />
@@ -125,35 +123,16 @@ export default function TimeTableManagementPage() {
             )}
 
             {/* --- All Modals --- */}
-            
-            {/* ✨ 1. המודאל הראשי לניהול רשומות לוח שנה */}
-            {activeModal === 'manageEntries' && (
-                <TimeTableCalendarManageModal
-                    open={true}
-                    onClose={handleCloseModals}
-                    onSave={handleSaveSuccess} // העברת הפרופ בשם הנכון
-                />
-            )}
-
-            {/* ✨ 2. המודאל לעריכה מהירה ישירות מהקלנדר */}
-            {activeModal === 'editEntry' && (
-                <TimeTableEditModal
-                    open={true}
-                    onClose={handleCloseModals}
-                    onSave={handleSaveSuccess} // העברת הפרופ בשם הנכון
-                    initialData={modalData}
-                />
-            )}
-            
-            {/* שאר המודאלים נשארים ללא שינוי */}
+            {activeModal === 'manageEntries' && ( <TimeTableCalendarManageModal open={true} onClose={handleCloseModals} onSave={handleSaveSuccess} /> )}
+            {activeModal === 'editEntry' && ( <TimeTableEditModal open={true} onClose={handleCloseModals} onSave={handleSaveSuccess} initialData={modalData} /> )}
             <EntitiesManageModal open={activeModal === 'entities'} onClose={handleCloseModals} onSaveSuccess={handleSaveSuccess} />
             <ManageCourseDefinitionModal open={activeModal === 'courseDef'} onClose={handleCloseModals} onSaveSuccess={handleSaveSuccess} existingCourses={allCourses} isLoadingCourses={isLoadingCourses} />
             <ManageCourseMeetingsModal
                 open={activeModal === 'courseMeetings'}
                 onClose={handleCloseModals}
                 onSaveSuccess={handleSaveSuccess}
-                 existingCourses={allCourses}
-                 isLoadingCourses={isLoadingCourses}
+                existingCourses={allCourses}
+                isLoadingCourses={isLoadingCourses}
                 initialCourseCode={modalData?.courseCode}
                 initialMeetingId={modalData?.id}
             />
