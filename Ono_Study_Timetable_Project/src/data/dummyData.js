@@ -1,16 +1,24 @@
 // src/data/dummyData.js
 
+// This file contains a comprehensive set of mock data for various collections in the application.
+// This data is essential for development, testing, and populating a local or staging
+// database with a realistic and interconnected set of records.
+
+// A helper map for converting day names to their numeric index (Sunday = 0).
 export const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
-// Helper functions for generating IDs according to new format
+// Helper functions to generate consistent and formatted IDs for new data.
 const generateStudentId = (index) => `${123456780 + index}`.padStart(9, '0');
-const generateCourseId = (index) => `CRS${String(1000 + index).padStart(7, '0')}`; // CRS + 7 digits
+const generateCourseId = (index) => `CRS${String(1000 + index).padStart(7, '0')}`; // e.g., CRS0001000
 const studentUsernamesForGeneration = Array.from({ length: 18 }, (_, i) => `student_${i + 2}`);
 
+// The main data object, structured to mirror the expected Firestore collections.
 export const dummyData = {
+  // A list of student users, including an admin, a primary test user, and generated students.
   students: [
     { id: "000000001", firstName: "Admin", lastName: "User", email: "admin@example.com", username: "adminuser", password: "admin123", courseCodes: [] },
     { id: "111111111", firstName: "Alice", lastName: "Smith", email: "alice.s@example.com", username: "alice_s", password: "password123", courseCodes: [] },
+    // `Array.from` is used to programmatically generate a larger set of test students.
     ...Array.from({ length: 18 }, (_, i) => {
         const index = i + 2;
         return {
@@ -21,6 +29,7 @@ export const dummyData = {
         };
     })
   ],
+  // A list of academic years, each containing an array of nested semester objects.
   years: [
     { yearCode: "Y2024", yearNumber: "2024", startDate: "2024-09-01", endDate: "2025-06-30", semesters: [
         { semesterCode: "S24A", semesterNumber: "A", startDate: "2024-10-27", endDate: "2025-02-07" },
@@ -34,6 +43,7 @@ export const dummyData = {
         { semesterCode: "S23A", semesterNumber: "A", startDate: "2023-10-29", endDate: "2024-02-09" },
         { semesterCode: "S23B", semesterNumber: "B", startDate: "2024-03-03", endDate: "2024-06-21" }
     ]},
+    // Procedurally generate future years for robust testing.
     ...Array.from({ length: 17 }, (_, i) => ({
         yearCode: `Y${2026 + i}`, yearNumber: `${2026 + i}`, startDate: `${2026 + i}-09-01`, endDate: `${2027 + i}-06-30`,
         semesters: [
@@ -42,17 +52,19 @@ export const dummyData = {
         ]
     }))
   ],
+  // A list of lecturers.
   lecturers: [
     { id: "L01", name: "Dr. Evelyn Reed", email: "e.reed@example.edu", phone: "555-1001" },
     { id: "L02", name: "Prof. Ben Carter", email: "b.carter@example.edu", phone: "555-1002" },
     { id: "L03", name: "Dr. Chloe Davis", email: "c.davis@example.edu", phone: "555-1003" },
     ...Array.from({ length: 17 }, (_, i) => ({
         id: `L${String(i + 4).padStart(2, '0')}`,
-        name: `Lecturer ${String.fromCharCode(68 + i)} Name`, // D, E, F...
-        email: `lecturer.${String.fromCharCode(97 + i + 3)}@example.edu`, // d, e, f...
+        name: `Lecturer ${String.fromCharCode(68 + i)} Name`, // Generates names starting with D, E, F...
+        email: `lecturer.${String.fromCharCode(97 + i + 3)}@example.edu`, // Generates emails with d, e, f...
         phone: `555-${1004 + i}`
     }))
   ],
+  // A list of sites (campuses), each with a nested array of room objects.
   sites: [
     { siteCode: "MAIN", siteName: "Main Campus", notes: "Central administration and humanities.", rooms: [ { roomCode: "MAIN101", roomName: "Room 101", notes: "Standard classroom" }, { roomCode: "MAIN102", roomName: "Room 102", notes: "" }, { roomCode: "MAIN201", roomName: "Seminar Room A", notes: "Projector" } ] },
     { siteCode: "SCI", siteName: "Science Building", notes: "Labs and research facilities.", rooms: [ { roomCode: "SCI-L1", roomName: "Chem Lab 1", notes: "Fume hoods" }, { roomCode: "SCI-L2", roomName: "Bio Lab", notes: "" }, { roomCode: "SCI-210", roomName: "Lecture Hall 210", notes: "" } ] },
@@ -64,12 +76,14 @@ export const dummyData = {
       rooms: [ { roomCode: `R${i + 6}-1`, roomName: `Room ${i + 6}01`, notes: "" }, { roomCode: `R${i + 6}-2`, roomName: `Room ${i + 6}02`, notes: "" } ]
     }))
   ],
+  // A list of course definitions, which reference lecturers, rooms, and semesters by their codes/IDs.
   courses: [
     { courseCode: "CRS0000001", courseName: "Intro to React", roomCode: "MAIN101", lecturerId: "L01", semesterCode: "S25A", notes: "Frontend basics", zoomMeetinglink: "", hours: [ { day: "Mon", start: "09:00", end: "10:30" }, { day: "Wed", start: "12:00", end: "13:30" } ] },
     { courseCode: "CRS0000002", courseName: "Data Structures", roomCode: "SCI-210", lecturerId: "L02", semesterCode: "S25A", notes: "", zoomMeetinglink: "", hours: [ { day: "Tue", start: "11:00", end: "12:30" }, { day: "Thu", start: "14:00", end: "15:30" } ] },
     { courseCode: "CRS0000003", courseName: "Algorithms", roomCode: "SCI-210", lecturerId: "L02", semesterCode: "S25B", notes: "Follow-up to C2", zoomMeetinglink: "", hours: [ { day: "Tue", start: "11:00", end: "12:30" }, { day: "Thu", start: "14:00", end: "15:30" } ] },
     { courseCode: "CRS0000004", courseName: "Database Systems", roomCode: "LIB-CR", lecturerId: "L03", semesterCode: "S25A", notes: "", zoomMeetinglink: "", hours: [ { day: "Fri", start: "10:00", end: "13:00" } ] },
     { courseCode: "CRS0000005", courseName: "Linear Algebra", roomCode: "MAIN102", lecturerId: "L04", semesterCode: "S25A", notes: "", zoomMeetinglink: "", hours: [ { day: "Mon", start: "14:00", end: "15:30" }, { day: "Wed", start: "09:00", end: "10:30" } ] },
+    // Procedurally generate more courses, cycling through the available lecturers, rooms, and semesters.
     ...Array.from({ length: 15 }, (_, i) => ({
         courseCode: generateCourseId(i + 6), // Generate ID using helper
         courseName: `Advanced Topic ${i + 1}`,
@@ -83,6 +97,7 @@ export const dummyData = {
         ]
     }))
   ],
+  // Public, system-wide holiday events.
   holidays: [
     { holidayCode: "H-NY25", holidayName: "New Year's Day '25", startDate: "2025-01-01", endDate: "2025-01-01", notes: "" },
     { holidayCode: "H-MLK25", holidayName: "MLK Day '25", startDate: "2025-01-20", endDate: "2025-01-20", notes: "" },
@@ -105,6 +120,7 @@ export const dummyData = {
     { holidayCode: "H-JUN26", holidayName: "Juneteenth '26", startDate: "2026-06-19", endDate: "2026-06-19", notes: "" },
     { holidayCode: "H-IND26", holidayName: "Independence Day '26", startDate: "2026-07-03", endDate: "2026-07-03", notes: "Observed" }
   ],
+  // Public, system-wide vacation periods.
   vacations: [
     { vacationCode: "V-SB25", vacationName: "Spring Break '25", startDate: "2025-03-24", endDate: "2025-03-28", notes: "Week long break" },
     { vacationCode: "V-SUM25", vacationName: "Summer Break '25", startDate: "2025-06-21", endDate: "2025-08-31", notes: "Between Sem B and Year Start" },
@@ -116,6 +132,7 @@ export const dummyData = {
       vacationCode: `V-GEN${i + 7}`, vacationName: `Other Break ${i + 1}`, startDate: `${2027 + i}-07-10`, endDate: `${2027 + i}-07-15`, notes: `Misc vacation ${i+1}`
     }))
   ],
+  // Public, general campus events.
   events: [
     { eventCode: "E-HACK25", eventName: "Annual Hackathon", startDate: "2025-04-11", endDate: "2025-04-13", allDay: true, notes: "Teams compete all weekend" },
     { eventCode: "E-JOB25A", eventName: "Job Fair - Fall '25", startDate: "2025-10-15", endDate: "2025-10-15", allDay: false, startHour: "10:00", endHour: "15:00", notes: "Main Hall" },
@@ -139,6 +156,7 @@ export const dummyData = {
         };
 })
   ],
+  // A list of tasks (assignments), each linked to a specific course.
   tasks: [
     { assignmentCode: "T1-CRS0000001", assignmentName: "React Component", courseCode: "CRS0000001", submissionDate: "2025-11-10", submissionHour: "23:59", notes: "Build a functional component" },
     { assignmentCode: "T1-CRS0000002", assignmentName: "Linked List Impl.", courseCode: "CRS0000002", submissionDate: "2025-11-15", submissionHour: "17:00", notes: "" },
@@ -161,15 +179,16 @@ export const dummyData = {
         };
       })
   ],
-studentEvents: [
+  // A list of personal events, each linked to a specific student by their `studentId` (username).
+  studentEvents: [
     { studentId: "adminuser", eventCode: "SE-ADMIN-1", eventName: "Dentist", startDate: "2025-11-05", allDay: false, startHour: "14:00", endHour: "15:00" },
     { studentId: "alice_s", eventCode: "SE-S1-1", eventName: "Study Group C1", startDate: "2025-11-06", allDay: false, startHour: "18:00", endHour: "20:00" },
     { studentId: "alice_s", eventCode: "SE-S1-2", eventName: "Movie Night", startDate: "2025-11-09", allDay: false, startHour: "20:00", endHour: "22:30" },
-    // --- FIX 1: The generated data now uses the temporary username key ---
+    // Procedurally generate more personal events, assigning them to the generated student usernames.
     ...Array.from({ length: 10 }, (_, i) => {
         const day = (20 + i).toString().padStart(2, '0'); // '20', '21', ... '29'
         return {
-            studentId: studentUsernamesForGeneration[i % studentUsernamesForGeneration.length], // Cycle through the defined usernames
+            studentId: studentUsernamesForGeneration[i % studentUsernamesForGeneration.length], // Cycle through the defined usernames.
             eventCode: `SE-GEN${i + 11}`, eventName: `Personal Errand ${i + 11}`,
             startDate: `2025-11-${day}`, endDate: `2025-11-${day}`,
             allDay: i % 4 === 0, startHour: "11:00", endHour: "11:30", notes: ""

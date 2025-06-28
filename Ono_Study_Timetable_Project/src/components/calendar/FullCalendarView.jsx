@@ -1,70 +1,80 @@
+// src/components/calendar/FullCalendarView.jsx
+
 import React, { useState, useEffect } from 'react';
+// Imports the main FullCalendar component and the necessary plugins for different views and interactions.
 import FullCalendar from "@fullcalendar/react";
-import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import interactionPlugin from "@fullcalendar/interaction";
+import dayGridPlugin from "@fullcalendar/daygrid"; // Plugin for month/day grid views.
+import timeGridPlugin from "@fullcalendar/timegrid"; // Plugin for week/day time grid views.
+import interactionPlugin from "@fullcalendar/interaction"; // Plugin for user interactions like clicking and selecting.
+// Imports Material-UI components for building the custom UI within the calendar events.
 import { Tooltip, Typography, Box, Link as MuiLink } from '@mui/material';
+// Imports the Firestore service to fetch collections from the database.
 import { fetchCollection } from '../../firebase/firestoreService';
 
-// מגדיר ומייצא רכיב ריאקט פונקציונלי בשם FullCalendarView.
-// הרכיב מקבל כ-props: מערך של אירועים (events), ופונקציות להתמודדות עם לחיצות (onDateClick, onEventClick).
+// This component renders a fully functional calendar using the FullCalendar library.
+// It's responsible for displaying events, handling user clicks, and customizing
+// the appearance of events with tooltips and detailed inner content.
+// Props:
+// - events: An array of event objects to be displayed on the calendar.
+// - onDateClick: A callback function to handle clicks on a specific date.
+// - onEventClick: A callback function to handle clicks on an existing event.
 export default function FullCalendarView({ events, onDateClick, onEventClick }) {
-    // מגדיר משתנה state שיחזיק Map למיפוי בין קוד חדר לשם האתר בו הוא נמצא.
+    // This state holds a Map to quickly look up a campus site name using a room's code.
+    // This avoids repeatedly searching for this information when rendering events.
     const [roomSiteMap, setRoomSiteMap] = useState(new Map());
-    // מגדיר משתנה state בוליאני כדי לעקוב אחר מצב הטעינה של המיפוי.
-    const [isLoadingMap, setIsLoadingMap] = useState(true); 
+    // A loading state to track the initial fetching of the site data.
+    const [isLoadingMap, setIsLoadingMap] = useState(true);
 
-    // useEffect hook שרץ פעם אחת בלבד, כשהרכיב נטען לראשונה, כדי להביא ולבנות את המיפוי.
+    // This useEffect hook runs once when the component first mounts.
+    // Its purpose is to fetch all site and room data from Firestore and build
+    // the `roomSiteMap` for efficient lookups later.
     useEffect(() => {
-        // פונקציה אסינכרונית פנימית שאחראית על הלוגיקה של יצירת המיפוי.
+        // An async function to perform the data fetching and map creation.
         const createRoomSiteMap = async () => {
-            // מעדכן את המצב ל'טוען' כדי שאפשר יהיה להציג חיווי טעינה במידת הצורך.
             setIsLoadingMap(true);
-            // בלוק try-catch לטיפול בשגיאות רשת או עיבוד.
             try {
-                // מביא את אוסף ה-'sites' מבסיס הנתונים של Firestore.
+                // Fetch the 'sites' collection from the database.
                 const sites = await fetchCollection("sites");
-                // יוצר אובייקט Map חדש וריק.
                 const map = new Map();
-                // עובר על כל האתרים שהתקבלו (עם בדיקה למקרה שהמערך ריק או null).
+                // Iterate over each site.
                 (sites || []).forEach(site => {
-                    // לכל אתר, עובר על מערך החדרים המשויך אליו.
+                    // For each site, iterate over its associated rooms.
                     (site.rooms || []).forEach(room => {
-                        // אם לחדר יש קוד חדר...
+                        // If a room has a code, add it to the map with the site's name as the value.
                         if (room.roomCode) {
-                            // ...מוסיף ערך ל-Map: המפתח הוא קוד החדר, והערך הוא שם האתר.
                             map.set(room.roomCode, site.siteName || `Site (${site.siteCode})`);
                         }
                     });
                 });
-                // מעדכן את ה-state של הרכיב עם ה-Map המלא.
+                // Update the state with the newly created map.
                 setRoomSiteMap(map);
             } catch (error) {
-                // במקרה של שגיאה, מדפיס הודעה לקונסול ומאתחל את המיפוי ל-Map ריק.
+                // In case of an error, log it and set an empty map to prevent crashes.
                 console.error("[FullCalendarView:createRoomSiteMap] Error fetching sites or creating map:", error);
                 setRoomSiteMap(new Map());
             } finally {
-                // בכל מקרה (הצלחה או כישלון), מסיים את מצב הטעינה.
+                // Ensure the loading state is turned off, regardless of success or failure.
                 setIsLoadingMap(false);
             }
         };
-        // קורא לפונקציה כדי להתחיל את תהליך הבאת הנתונים.
+        // Invoke the function to start the process.
         createRoomSiteMap();
-    }, []); // המערך הריק מבטיח שה-effect ירוץ רק פעם אחת.
+    }, []); // The empty dependency array [] ensures this effect runs only once on mount.
 
-    // פונקציה שמייצרת את תוכן ה-Tooltip (החלון הקופץ) שמופיע במעבר עכבר על אירוע.
+    // This function generates the React component (JSX) for the detailed tooltip
+    // that appears when a user hovers over a calendar event.
     const renderTooltipContent = (event) => {
-        // שולף את הנתונים המורחבים של האירוע.
+        // Extract extended, custom properties from the event object.
         const props = event.extendedProps || {};
-        // מחלץ את שם האתר מה-Map שנבנה קודם, אם קיים קוד חדר.
+        // Look up the site name from our pre-built map if a room code exists.
         const siteName = props.roomCode ? roomSiteMap.get(props.roomCode) : null;
-        // מפרמט את תאריך ושעת ההתחלה לתצוגה קריאה.
+        // Format the start and end times for display.
         const startStr = event.start?.toLocaleString([], { dateStyle: 'short', timeStyle: 'short', hour12: false }) || 'N/A';
-        // מפרמט את תאריך ושעת הסיום רק אם הם שונים מתאריך ההתחלה.
         const endStr = (event.end && event.start?.toISOString() !== event.end?.toISOString())
-                       ? event.end.toLocaleString([], { dateStyle: 'short', timeStyle: 'short', hour12: false })
-                       : null;
-        // מחזיר JSX (רכיבי ריאקט) שמציגים את המידע המפורט על האירוע.
+            ? event.end.toLocaleString([], { dateStyle: 'short', timeStyle: 'short', hour12: false })
+            : null;
+
+        // Return the JSX that structures the tooltip's content.
         return (
             <Box sx={{ p: 1, fontSize: '0.9em', maxWidth: 300 }}>
                 <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>{event.title}</Typography>
@@ -72,7 +82,8 @@ export default function FullCalendarView({ events, onDateClick, onEventClick }) 
                 <Typography variant="body2">Start: {startStr}</Typography>
                 {endStr && <Typography variant="body2">End: {endStr}</Typography>}
                 {event.allDay && <Typography variant="body2" sx={{ fontStyle: 'italic' }}>(All Day)</Typography>}
-                {/* תנאי שמציג מידע נוסף רק אם סוג האירוע הוא מפגש קורס. */}
+                
+                {/* Conditionally render details specific to 'courseMeeting' events. */}
                 {props.type === 'courseMeeting' && (
                     <>
                         {props.roomCode && ( <Typography variant="body2"> Room: {props.roomCode || 'N/A'} {siteName ? `(@ ${siteName})` : ''} </Typography> )}
@@ -81,105 +92,102 @@ export default function FullCalendarView({ events, onDateClick, onEventClick }) 
                         {props.zoomMeetinglink && ( <Typography variant="body2"> Zoom: <MuiLink href={props.zoomMeetinglink} target="_blank" rel="noopener noreferrer" underline="hover" sx={{ wordBreak: 'break-all' }}>Join Meeting</MuiLink> </Typography> )}
                     </>
                 )}
-                {/* תנאי שמציג הערות אם קיימות, עבור סוגי אירועים ספציפיים. */}
+
+                {/* Conditionally render notes for relevant event types. */}
                 {props.notes && ['studentEvent', 'event', 'holiday', 'vacation', 'task', 'courseMeeting'].includes(props.type) && ( <Typography variant="body2" sx={{ mt: 0.5, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}> Notes: {props.notes} </Typography> )}
                 {props.type === 'studentEvent' && props.studentId && ( <Typography variant="body2" sx={{ mt: 0.5, color: 'text.secondary' }}>Owner ID: {props.studentId}</Typography> )}
             </Box>
         );
     };
 
-    // פונקציה שמייצרת את התוכן שמוצג *בתוך* הריבוע של האירוע בלוח השנה.
+    // This function generates the JSX for the content *inside* the event's box on the calendar grid.
+    // This content needs to be very compact to fit in the small space.
     const renderEventInnerContent = (eventInfo) => {
-        // שולף את הנתונים הרלוונטיים מאובייקט המידע של האירוע.
         const props = eventInfo.event.extendedProps || {};
         const timeText = eventInfo.timeText;
         const title = eventInfo.event.title;
         const lecturerDisplay = props.lecturerName || (props.lecturerId ? `ID:${props.lecturerId}` : null);
         const siteName = props.roomCode ? roomSiteMap.get(props.roomCode) : null;
 
-        // מחזיר JSX מעוצב שמציג את המידע החשוב ביותר בצורה קומפקטית.
+        // Returns the compact, styled JSX for inside the event.
         return (
             <Box sx={{ fontSize: '0.85em', lineHeight: 1.25, overflow: 'hidden', whiteSpace: 'normal', p: '1px 3px', height: '100%' }}>
                 <Typography variant="body2" sx={{ fontWeight: 'bold', mb: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {timeText && <span>{timeText} </span>}
                     <span>{title}</span>
                 </Typography>
-                {/* מציג מידע נוסף וקומפקטי על החדר והמרצה עבור מפגשי קורס. */}
+                
+                {/* Shows highly condensed room and lecturer info for course meetings. */}
                 {props.type === 'courseMeeting' && (
                     <Typography variant="caption" component="div" sx={{ opacity: 0.85, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {props.roomCode && ( <Box component="span" sx={{ mr: 0.5 }} title={`Room: ${props.roomCode}${siteName ? ` @ ${siteName}` : ''}`}> <Box component="span" sx={{ mr: 0.25 }}>📍</Box> {props.roomCode} {siteName && ` (${siteName.substring(0, 3)}..)`} </Box> )}
                     {lecturerDisplay && ( <Box component="span" title={`Lecturer: ${lecturerDisplay}`}> | <Box component="span" sx={{ mr: 0.25 }}>🧑‍🏫</Box> {lecturerDisplay} </Box> )}
                     </Typography>
                 )}
-                {/* --- START: FIX 1 --- */}
-                {/* הבעיה: הקוד המקורי לא כלל 'holiday' ו-'vacation' כאן, ולכן הם לא הציגו את אייקון הפתק. */}
-                {/* התיקון: הוספנו אותם למערך. עכשיו הם יציגו את האייקון, בדיוק כמו 'event'. */}
-                {/* מציג אייקון של פתק אם לאירוע יש הערות. */}
-                {props.notes && ['studentEvent', 'event', 'task', 'courseMeeting', 'holiday', 'vacation'].includes(props.type) && ( 
-                    <Box component="span" title="Has notes" sx={{ fontSize: '0.8em', opacity: 0.7, ml: '3px' }}>📝</Box> 
+                
+                {/* Shows a note icon if the event has notes. The list of types was expanded to include
+                    'holiday' and 'vacation' to ensure they also show the icon when applicable. */}
+                {props.notes && ['studentEvent', 'event', 'task', 'courseMeeting', 'holiday', 'vacation'].includes(props.type) && (
+                    <Box component="span" title="Has notes" sx={{ fontSize: '0.8em', opacity: 0.7, ml: '3px' }}>📝</Box>
                 )}
-                {/* --- END: FIX 1 --- */}
             </Box>
         );
     };
 
-    // מחזיר את רכיב ה-FullCalendar המוגדר במלואו.
+    // This is the main return statement which renders the FullCalendar component with all our configurations.
     return (
         <FullCalendar
-            // טוען את הפלאגינים הדרושים לתצוגות השונות ולאינטראקציה.
+            // Load the necessary plugins for functionality.
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-            // מגדיר את תצוגת ברירת המחדל לחודש.
+            // Set the default view to the monthly grid.
             initialView="dayGridMonth"
-            // מקבל את מערך האירועים מה-props.
+            // Pass the events array from props.
             events={events || []}
-            // מקשר את פונקציות ה-callback ללחיצה על תאריך ריק או על אירוע קיים.
+            // Wire up the callback props.
             dateClick={onDateClick}
             eventClick={onEventClick}
-            // מגדיר את כפתורי הניווט והתצוגה בסרגל העליון.
+            // Configure the header toolbar with navigation and view-switching buttons.
             headerToolbar={{ left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }}
-            // מאפשר למשתמש לבחור טווח תאריכים.
+            // Allow users to select dates/times by clicking and dragging.
             selectable={true}
-            // מונע מהמשתמש לערוך אירועים על ידי גרירה.
+            // Disable native event dragging and resizing.
             editable={false}
             droppable={false}
-            // מגדיר את גובה היומן כך שיתאים את עצמו לתוכן.
+            // Set the calendar's height to adjust automatically to its content.
             height="auto"
-            // מגדיר את פורמט התצוגה של השעות ביומן (24 שעות).
+            // Use 24-hour format for time display.
             eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-            // זוהי נקודת התאמה אישית מרכזית: היא מגדירה איך כל אירוע ירונדר.
+            // This is a key customization point. It defines a custom rendering function for all events.
             eventContent={(eventInfo) => (
-                // עוטף את תוכן האירוע ברכיב Tooltip של Material-UI.
+                // We wrap our custom event content in a Material-UI Tooltip.
                 <Tooltip title={renderTooltipContent(eventInfo.event)} arrow placement="top">
-                    {/* תיבה שמפעילה את ה-Tooltip ומכילה את התוכן הפנימי של האירוע. */}
+                    {/* The box acts as the trigger for the tooltip and contains the inner content. */}
                     <Box sx={{ display: 'block', width: '100%', height: '100%', cursor: 'pointer' }}>
-                        {/* קורא לפונקציה שהגדרנו קודם כדי לרנדר את התוכן הפנימי. */}
+                        {/* Call our function to render the compact, inner content of the event. */}
                         {renderEventInnerContent(eventInfo)}
                     </Box>
                 </Tooltip>
             )}
-            // פונקציה שמוסיפה שמות קלאסים (CSS classes) לאירועים לפי הסוג שלהם.
+            // This function dynamically assigns CSS classes to events based on their type.
             eventClassNames={(arg) => {
                 let type = arg.event.extendedProps?.type || 'unknown';
-                
-                // --- START: FIX 2 ---
-                // הבעיה: הקוד המקורי נתן קלאס ייחודי ל'holiday' ו'vacation', מה שגרם לעיצוב שונה.
-                // התיקון: אנחנו מאחדים אותם. אם הסוג הוא חג או חופשה, אנחנו מתייחסים אליו כאל 'event'
-                // לצורך קביעת העיצוב (CSS class). זה מאלץ אותם לקבל את אותו עיצוב כמו אירוע רגיל.
+
+                // To create a consistent visual style, we treat 'holiday' and 'vacation'
+                // as a standard 'event' for styling purposes. This ensures they share the same CSS class
+                // and therefore the same background color and appearance.
                 if (type === 'holiday' || type === 'vacation') {
                     type = 'event';
                 }
-                // --- END: FIX 2 ---
 
-                // יוצר מערך של קלאסים. הקלאס הראשי מבוסס על סוג האירוע.
-                const classes = [`eventType-${type}`]; 
-                // מוסיף קלאס נוסף אם האירוע הוא אירוע של יום שלם.
+                // Create an array of class names.
+                const classes = [`eventType-${type}`];
+                // Add a specific class for all-day events, which FullCalendar can use for styling.
                 if (arg.event.allDay) classes.push('fc-event-allday');
-                // מחזיר את מערך הקלאסים שיוחלו על האירוע.
                 return classes;
             }}
-            // מאפשר ליומן להציג את האירועים בצורה הטובה ביותר בהתאם למקום הפנוי.
+            // Allows the calendar to display events in the most appropriate way for the available space.
             eventDisplay='auto'
-            // מכבה את התצוגה של שעות העבודה המוגדרות כברירת מחדל.
+            // Turns off the default "business hours" highlighting.
             businessHours={false}
         />
     );

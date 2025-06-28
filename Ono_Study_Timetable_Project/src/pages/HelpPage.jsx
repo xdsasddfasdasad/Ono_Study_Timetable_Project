@@ -1,5 +1,9 @@
+// src/pages/HelpPage.jsx
+
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Accordion, AccordionSummary, AccordionDetails, Stack, Paper, Link as MuiLink, LinearProgress, Fade } from '@mui/material'; // ✨ 1. הוספת ייבוא
+// Imports Material-UI components for building the layout, FAQ accordions, and loading states.
+import { Box, Typography, Accordion, AccordionSummary, AccordionDetails, Stack, Paper, Link as MuiLink, LinearProgress, Fade } from '@mui/material';
+// Imports icons for a more visually appealing UI.
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import ContactSupportIcon from '@mui/icons-material/ContactSupport';
@@ -7,24 +11,31 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 
+// This is a presentational component that provides users with help and answers to frequently asked questions.
+// It uses the Material-UI Accordion component to create a clean, collapsible FAQ section.
 export default function HelpPage() {
+    // State to manage which accordion panel is currently expanded. `false` means all are closed.
     const [expanded, setExpanded] = useState(false);
-    // ✨ 2. הוספת state לניהול הטעינה
+    // A state to manage a simulated loading effect for a smoother page-load transition.
     const [isLoading, setIsLoading] = useState(true);
 
+    // This handler is called when a user clicks on an accordion header.
+    // It updates the `expanded` state to open the clicked panel and close any others.
     const handleChange = (panel) => (event, isExpanded) => {
         setExpanded(isExpanded ? panel : false);
     };
     
-    // ✨ 3. הוספת useEffect לדימוי טעינה קצרה
+    // This effect simulates a brief loading period when the component first mounts.
+    // This gives time for the `Fade` transition to work, preventing the content from "popping" into view abruptly.
     useEffect(() => {
         const timer = setTimeout(() => {
             setIsLoading(false);
-        }, 200); // דימוי טעינה של 200 מילישניות
+        }, 200); // Simulate a 200ms load time.
 
-        // ניקוי הטיימר כשהקומפוננטה יורדת מהמסך למניעת דליפות זיכרון
+        // The cleanup function is important to prevent memory leaks if the component
+        // unmounts before the timer finishes.
         return () => clearTimeout(timer);
-    }, []); // מערך תלויות ריק מבטיח שהאפקט ירוץ פעם אחת בלבד
+    }, []); // The empty dependency array `[]` ensures this effect runs only once.
 
     return (
         <Box sx={{ maxWidth: '900px', mx: 'auto', p: { xs: 2, sm: 3 } }}>
@@ -35,14 +46,16 @@ export default function HelpPage() {
                 </Typography>
             </Stack>
 
-            {/* ✨ 4. הוספת רכיב ה-LinearProgress */}
+            {/* A subtle loading bar that is visible during the simulated loading period. */}
             <Box sx={{ height: 4, mb: 3 }}>
                 {isLoading && <LinearProgress />}
             </Box>
 
-            {/* ✨ 5. עטיפת התוכן ב-Fade כדי ליצור כניסה חלקה */}
+            {/* The `Fade` component provides a smooth transition, fading the content in
+                once the `isLoading` state becomes false. */}
             <Fade in={!isLoading} timeout={400}>
                 <div>
+                    {/* General Usage FAQ Section */}
                     <Paper elevation={2} sx={{ mb: 3, p: 2 }}>
                         <Typography variant="h6" gutterBottom>General Usage</Typography>
                         
@@ -101,6 +114,7 @@ export default function HelpPage() {
                         </Accordion>
                     </Paper>
         
+                    {/* Administrator FAQ Section */}
                     <Paper elevation={2} sx={{ mb: 3, p: 2 }}>
                         <Typography variant="h6" gutterBottom>For Administrators</Typography>
                         
@@ -149,6 +163,7 @@ export default function HelpPage() {
                         </Accordion>
                     </Paper>
         
+                     {/* Contact Information Section */}
                      <Paper elevation={2} sx={{ p: 2 }}>
                           <Stack direction="row" spacing={1} alignItems="center" mb={1}>
                               <ContactSupportIcon color="action" />
@@ -163,4 +178,4 @@ export default function HelpPage() {
             </Fade>
         </Box>
     );
-}   
+}
