@@ -171,40 +171,24 @@ export const validateLecturerForm = async (formData, options = {}) => {
   const errors = {};
   const editingId = options.editingId;
 
-  // 🗑️ הוסר: הבדיקה if (!formData.id?.trim())
-  // הסיבה: עבור מרצה חדש, אין ID בטופס, וזה תקין.
-  // ה-ID נוצר על ידי Firestore.
+  if (!formData.id?.trim()) { errors.id = "Lecturer ID is required."; }
 
-  if (!formData.name?.trim()) {
-    errors.name = "Lecturer name is required.";
-  } else {
-    try {
-      const existingByName = await fetchDocumentsByQuery('lecturers', 'name', '==', formData.name.trim());
-      // הבדיקה לוודא שהשם לא קיים אצל מרצה אחר
-      if (existingByName.some(doc => doc.id !== editingId)) {
-        errors.name = "Lecturer name already exists.";
-      }
-    } catch (e) {
-      console.error("Lecturer name check failed:", e);
-      errors.name = "Could not verify name uniqueness.";
-    }
+  if (!formData.name?.trim()) { errors.name = "Lecturer name is required."; }
+  else {
+      try {
+          const existingByName = await fetchDocumentsByQuery('lecturers', 'name', '==', formData.name.trim());
+          if (existingByName.some(doc => doc.id !== editingId)) { errors.name = "Lecturer name already exists."; }
+      } catch (e) { console.error("Lecturer name check failed:", e); errors.name = "Could not verify name uniqueness."; }
   }
 
   if (formData.email && formData.email.trim()) {
-    if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) {
-      errors.email = "Invalid email format.";
-    } else {
-      try {
-        const existingByEmail = await fetchDocumentsByQuery('lecturers', 'email', '==', formData.email.trim());
-        // הבדיקה לוודא שהאימייל לא קיים אצל מרצה אחר
-        if (existingByEmail.some(doc => doc.id !== editingId)) {
-          errors.email = "Email already registered.";
-        }
-      } catch (e) {
-        console.error("Lecturer email check failed:", e);
-        errors.email = "Could not verify email uniqueness.";
+      if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) { errors.email = "Invalid email format."; }
+      else {
+          try {
+              const existingByEmail = await fetchDocumentsByQuery('lecturers', 'email', '==', formData.email.trim());
+              if (existingByEmail.some(doc => doc.id !== editingId)) { errors.email = "Email already registered."; }
+          } catch (e) { console.error("Lecturer email check failed:", e); errors.email = "Could not verify email uniqueness."; }
       }
-    }
   }
   return errors;
 };
@@ -244,36 +228,20 @@ export const validateCourseForm = async (formData, options = {}) => {
 
 export const validateCourseMeetingForm = async (formData, options = {}) => {
     const errors = {};
-    const { parentSemester } = options;
 
     if (!formData.title?.trim()) {
       errors.title = "Meeting title is required.";
     }
     if (!formData.start) {
       errors.start = "Start date and time are required.";
-    } else if (parentSemester) { // Only validate range if we have semester info
-        try {
-            const meetingStartDate = new Date(formData.start);
-            const semesterInterval = {
-                start: parseISO(parentSemester.startDate),
-                end: parseISO(parentSemester.endDate)
-            };
-            if (!isWithinInterval(meetingStartDate, semesterInterval)) {
-                errors.start = `Date must be within semester dates (${parentSemester.startDate} to ${parentSemester.endDate}).`;
-            }
-        } catch (e) {
-            errors.start = "Invalid date format for validation.";
-        }
     }
-
     if (!formData.end) {
       errors.end = "End date and time are required.";
     }
-
     if (formData.start && formData.end) {
         try {
-            const startDate = new Date(formData.start);
-            const endDate = new Date(formData.end);
+            const startDate = new Date(formData.start.toDate ? formData.start.toDate() : formData.start);
+            const endDate = new Date(formData.end.toDate ? formData.end.toDate() : formData.end);
             if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
                 throw new Error("Invalid date format detected.");
             }
@@ -285,7 +253,6 @@ export const validateCourseMeetingForm = async (formData, options = {}) => {
             errors.end = errors.end || "Invalid date format.";
         }
     }
-
     if (!formData.lecturerId) {
       errors.lecturerId = "Lecturer is required.";
     }
@@ -301,19 +268,38 @@ export const validateCourseMeetingForm = async (formData, options = {}) => {
 
 export const validateTaskForm = async (formData, options = {}) => {
   const errors = {};
+  
+  // editingId הוא ה-ID האמיתי של המסמך כפי שהוא מופיע ב-Firestore,
+  // אותו קיבלנו מהקליק בלוח השנה והעברנו דרך initialData.id
   const editingId = options.editingId;
 
-  if (!formData.assignmentCode?.trim()) { errors.assignmentCode = "Assignment code is required."; }
-  else {
-       try {
-          const existingByCode = await fetchDocumentsByQuery('tasks', 'assignmentCode', '==', formData.assignmentCode.trim());
-          if (existingByCode.some(doc => doc.id !== editingId)) { errors.assignmentCode = "Assignment code already exists."; }
-       } catch (e) { console.error("Task code check failed:", e); errors.assignmentCode = "Could not verify code uniqueness."; }
-  }
-
+  // הולידציות על שם המשימה, קורס ותאריך נשארות זהות
   if (!formData.assignmentName?.trim()) errors.assignmentName = "Assignment name is required.";
   if (!formData.courseCode?.trim()) errors.courseCode = "Associated course is required.";
   if (!formData.submissionDate?.trim()) errors.submissionDate = "Submission date is required.";
+
+  // הולידציה על קוד המשימה, עכשיו עם ההשוואה הנכונה
+  if (!formData.assignmentCode?.trim()) { 
+    errors.assignmentCode = "Assignment code is required."; 
+  } else {
+       try {
+          // אנחנו עדיין מחפשים לפי הקוד העסקי
+          const existingByCode = await fetchDocumentsByQuery('tasks', 'assignmentCode', '==', formData.assignmentCode.trim());
+          
+          // ✨ --- התיקון הסופי והוודאי כאן --- ✨
+          // ההשוואה הנכונה:
+          // האם קיים מסמך עם אותו assignmentCode,
+          // שה-ID האמיתי שלו ב-Firestore (שמגיע מ-firestoreService בתור doc.id)
+          // שונה מה-ID האמיתי של המסמך שאנחנו עורכים?
+          if (existingByCode.some(doc => doc.id !== editingId)) { 
+              errors.assignmentCode = "Assignment code already exists."; 
+          }
+       } catch (e) { 
+           console.error("Task code check failed:", e); 
+           errors.assignmentCode = "Could not verify code uniqueness."; 
+       }
+  }
+
   return errors;
 };
 
@@ -336,38 +322,27 @@ export const validateSiteForm = async (formData, options = {}) => {
 export const validateRoomForm = async (formData, options = {}) => {
     const errors = {};
     const parentSite = options.parentRecord;
-    // editingId יהיה null/undefined במצב 'new', ועם ערך במצב 'edit'
-    const editingId = options.editingId; 
+    const editingId = options.editingId;
 
-    // ✨ תיקון: הבדיקה על roomCode צריכה להתעלם מהחדר הנוכחי שאנחנו עורכים
-    if (!formData.roomCode?.trim()) {
-        errors.roomCode = "Room code is required.";
-    } else if (parentSite?.rooms) {
-        // ודא שהקוד לא שייך לחדר אחר באתר
-        const duplicateCode = parentSite.rooms.some(r =>
-             r.roomCode?.trim() === formData.roomCode?.trim() && r.roomCode !== editingId
-        );
-        if (duplicateCode) {
-            errors.roomCode = "Room code already exists in this site.";
-        }
+    if (!formData.roomCode?.trim()) { errors.roomCode = "Room code is required."; }
+    else if (parentSite?.rooms) {
+         const duplicateCode = parentSite.rooms.some(r =>
+              r.roomCode?.trim() === formData.roomCode?.trim() && r.roomCode !== editingId
+         );
+         if (duplicateCode) { errors.roomCode = "Room code already exists in this site."; }
     }
 
-    if (!formData.roomName?.trim()) {
-        errors.roomName = "Room name is required.";
-    } else if (parentSite?.rooms) {
-        // ודא שהשם לא שייך לחדר אחר באתר
-        const duplicateName = parentSite.rooms.some(r =>
-             r.roomName?.trim().toLowerCase() === formData.roomName?.trim().toLowerCase() && r.roomCode !== editingId
-        );
-        if (duplicateName) {
-            errors.roomName = "Room name already exists in this site.";
-        }
+    if (!formData.roomName?.trim()) { errors.roomName = "Room name is required."; }
+    else if (parentSite?.rooms) {
+         const duplicateName = parentSite.rooms.some(r =>
+              r.roomName?.trim().toLowerCase() === formData.roomName?.trim().toLowerCase() && r.roomCode !== editingId
+         );
+         if (duplicateName) { errors.roomName = "Room name already exists in this site."; }
     }
 
-    if (!formData.siteCode?.trim()) {
-        errors.siteCode = "Parent site is required.";
-    } else if (parentSite && formData.siteCode !== parentSite.siteCode) {
-        errors.siteCode = "Site code mismatch with parent record.";
+    if (!formData.siteCode?.trim()) errors.siteCode = "Parent site code is required.";
+    else if (parentSite && formData.siteCode !== parentSite.siteCode) {
+         errors.siteCode = "Site code mismatch with parent record.";
     }
 
     return errors;
@@ -395,18 +370,39 @@ export const validateVacationForm = async (formData, options = {}) => {
   const errors = {};
   const editingId = options.editingId;
 
-  if (!formData.vacationCode?.trim()) { errors.vacationCode = "Vacation code is required."; }
-  else {
+  if (!formData.vacationCode?.trim()) { 
+    errors.vacationCode = "Vacation code is required."; 
+  } else {
       try {
           const existingByCode = await fetchDocumentsByQuery('vacations', 'vacationCode', '==', formData.vacationCode.trim());
-          if (existingByCode.some(doc => doc.id !== editingId)) { errors.vacationCode = "Vacation code already exists."; }
-       } catch (e) { console.error("Vacation code check failed:", e); errors.vacationCode = "Could not verify code uniqueness."; }
+          if (existingByCode.some(doc => doc.vacationCode !== editingId)) { 
+              errors.vacationCode = "Vacation code already exists."; 
+          }
+       } catch (e) { 
+           console.error("Vacation code check failed:", e); 
+           errors.vacationCode = "Could not verify code uniqueness."; 
+       }
   }
 
-  if (!formData.vacationName?.trim()) errors.vacationName = "Vacation name is required.";
+  if (!formData.vacationName?.trim()) {
+    errors.vacationName = "Vacation name is required.";
+  }
 
-  const dateTimeErrors = validateDateTime(formData);
-  return { ...errors, ...dateTimeErrors };
+  // ✨ תיקון: הסרת הקריאה ל-validateDateTime שאינה רלוונטית לחופשה.
+  // נוודא רק שתאריכי התחלה וסיום קיימים.
+  if (!formData.startDate) {
+      errors.startDate = "Start date is required.";
+  }
+  if (!formData.endDate) {
+      errors.endDate = "End date is required.";
+  }
+
+  // ונוסיף בדיקה שהגיונית: תאריך הסיום לא יכול להיות לפני תאריך ההתחלה.
+  if (formData.startDate && formData.endDate && new Date(formData.endDate) < new Date(formData.startDate)) {
+      errors.endDate = "End date cannot be before the start date.";
+  }
+
+  return errors;
 };
 
 export const validateEventForm = async (formData, options = {}) => {

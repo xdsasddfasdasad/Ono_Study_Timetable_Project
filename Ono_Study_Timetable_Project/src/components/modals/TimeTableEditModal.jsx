@@ -7,7 +7,7 @@ import { formMappings } from "../../utils/formMappings";
 import { handleSaveOrUpdateRecord, handleDeleteEntity } from "../../handlers/formHandlers";
 import { fetchCollection } from "../../firebase/firestoreService";
 
-// --- שלב 1: ייבוא רק של הטפסים הרלוונטיים ---
+// ייבוא הטפסים הרלוונטיים
 import YearForm from "./forms/YearForm";
 import SemesterForm from "./forms/SemesterForm";
 import TaskForm from "./forms/TaskForm";
@@ -15,7 +15,6 @@ import HolidayForm from "./forms/HolidayForm";
 import VacationForm from "./forms/VacationForm";
 import EventForm from "./forms/EventForm";
 
-// --- שלב 2: מיפוי רק של הטפסים הרלוונטיים ---
 const formComponentMap = {
     year: YearForm,
     semester: SemesterForm,
@@ -25,7 +24,6 @@ const formComponentMap = {
     event: EventForm,
 };
 
-// --- שלב 3: פונקציית עזר רזה שטוענת רק מה שצריך ---
 const loadSelectOptionsAsync = async () => {
     try {
         const [years, courses] = await Promise.all([
@@ -45,30 +43,29 @@ const loadSelectOptionsAsync = async () => {
 export default function TimeTableEditModal({ open, onClose, onSave, initialData }) {
     const recordType = initialData?.type;
 
-    const [formData, setFormData] = useState(null); // ✨ FIX: Start with null
+    const [formData, setFormData] = useState(null);
     const [errors, setErrors] = useState({});
     const [generalError, setGeneralError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [isLoadingOptions, setIsLoadingOptions] = useState(true); // ✨ FIX: Start as true
+    const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+
     const [selectOptions, setSelectOptions] = useState({});
 
     const FormComponent = recordType ? formComponentMap[recordType] : null;
 
     useEffect(() => {
         if (open && initialData) {
-            setIsLoadingOptions(true); // Set loading to true on open
-            setFormData(null); // Clear previous data
+            setIsLoadingOptions(true);
+            setFormData(null); 
             setErrors({}); 
             setGeneralError("");
 
-            // ✨ FIX 1: The main logic fix is here.
-            // We ensure all state updates happen inside the .then() block
-            // only after the asynchronous operation is complete.
             loadSelectOptionsAsync().then(options => {
                 setSelectOptions(options);
-                setFormData({ ...initialData }); // Set form data AFTER options are loaded
-                setIsLoadingOptions(false); // Set loading to false AFTER everything is ready
+                // initialData כבר כולל את ה-id האמיתי מהקליק בלוח השנה.
+                setFormData({ ...initialData }); 
+                setIsLoadingOptions(false);
             });
         }
     }, [open, initialData]);
@@ -80,32 +77,48 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData 
         if (errors[name]) setErrors(prev => { const newErrors = {...prev}; delete newErrors[name]; return newErrors; });
     }, [errors]);
 
-    const handleUpdateClick = useCallback(async () => {
-        // ✨ FIX 2: Check for formData existence before saving
-        if (!recordType || !formData) return;
-        setIsLoading(true); setErrors({}); setGeneralError("");
+const handleUpdateClick = useCallback(async () => {
+    if (!recordType || !formData) return;
+    setIsLoading(true); setErrors({}); setGeneralError("");
 
-        const result = await handleSaveOrUpdateRecord(
-            formMappings[recordType].collectionName, formData, "edit",
-            { recordType, editingId: formData[formMappings[recordType].primaryKey] }
-        );
-        setIsLoading(false);
+    const mapping = formMappings[recordType];
+    const primaryKeyValue = formData[mapping.primaryKey];
+    
+    // --- ✨ הוספה לצורך דיבאג ✨ ---
+    console.log("--- DEBUGGING MODAL ---");
+    console.log("Record Type:", recordType);
+    console.log("Initial Data ID (Firestore ID):", initialData?.id);
+    console.log("Primary Key Field from Mapping:", mapping.primaryKey);
+    console.log("Primary Key Value from FormData:", primaryKeyValue);
+    console.log("------------------------");
 
-        if (result.success) {
-            // This now correctly calls the `onSave` prop
-            onSave?.(); 
-            onClose?.();
-        } else {
-            setErrors(result.errors || {});
-            setGeneralError(result.message || "Failed to update record.");
+    const result = await handleSaveOrUpdateRecord(
+        mapping.collectionName, 
+        formData, 
+        "edit",
+        { 
+            recordType, 
+            editingId: initialData?.id,
+            primaryKeyValue: primaryKeyValue
         }
-    }, [recordType, formData, onSave, onClose]);
+    );
+    setIsLoading(false);
 
-    // ... (handleDeleteClick is unchanged) ...
+    if (result.success) {
+        onSave?.(); 
+        onClose?.();
+    } else {
+        setErrors(result.errors || {});
+        setGeneralError(result.message || "Failed to update record.");
+    }
+}, [recordType, formData, onSave, onClose, initialData]);
+
+
     const handleDeleteClick = useCallback(async () => {
         if (!recordType || !formData) return;
         const mapping = formMappings[recordType];
-        const recordId = formData[mapping.primaryKey];
+        // ✨ ותיקון דומה כאן למחיקה, כדי להשתמש ב-ID האמיתי
+        const recordId = initialData?.id || formData[mapping.primaryKey];
         const recordLabel = formData.eventName || formData.holidayName || formData.vacationName || formData.assignmentName || formData.yearNumber || formData.semesterNumber || recordId;
 
         if (!window.confirm(`DELETE ${mapping.label}:\n"${recordLabel}"\n\nThis action cannot be undone.`)) return;
@@ -122,7 +135,7 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData 
         } else {
             setGeneralError(result.message || "Failed to delete record.");
         }
-    }, [recordType, formData, onSave, onClose]);
+    }, [recordType, formData, onSave, onClose, initialData]);
 
 
     return (
@@ -131,7 +144,6 @@ export default function TimeTableEditModal({ open, onClose, onSave, initialData 
               <Stack spacing={3} sx={{ minWidth: { sm: 500 }, pt: 1 }}>
                   {generalError && <Alert severity="error">{generalError}</Alert>}
                   
-                  {/* ✨ FIX 3: Check for formData as well before rendering the form */}
                   {isLoadingOptions || !formData ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
                   ) : FormComponent ? (

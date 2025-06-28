@@ -136,14 +136,57 @@ export const setDocument = async (collectionPath, documentId, data) => {
 };
 
 export const updateDocument = async (collectionPath, documentId, data) => {
-     console.log(`[Firestore] Updating document: ${collectionPath}/${documentId}`);
-     if (!documentId) { throw new Error("[Firestore] Document ID is required for updateDocument."); }
+    console.log(`[Firestore] Attempting to update document in '${collectionPath}' with ID: ${documentId}`);
+    if (!documentId) { throw new Error("[Firestore] Document ID is required for updateDocument."); }
+
+    // מיפוי של שמות שדות המפתח העסקיים לכל אוסף רלוונטי
+    const primaryKeyMap = {
+        tasks: 'assignmentCode',
+        vacations: 'vacationCode',
+        holidays: 'holidayCode',
+        events: 'eventCode',
+        years: 'yearCode',
+        courses: 'courseCode',
+        sites: 'siteCode',
+        lecturers: 'id', // המפתח העסקי למרצים הוא 'id'
+    };
+
     try {
-        const docRef = doc(db, collectionPath, documentId);
-        await updateDoc(docRef, data); // Merges data, fails if doc doesn't exist
+        let docRef;
+        const businessKeyField = primaryKeyMap[collectionPath];
+
+        if (businessKeyField) {
+            // אם זה אוסף עם מפתח עסקי (כמו tasks), נחפש את המסמך לפי המפתח הזה
+            console.log(`[Firestore] Collection '${collectionPath}' uses a business key ('${businessKeyField}'). Searching for document where ${businessKeyField} == ${documentId}`);
+            
+            const q = query(collection(db, collectionPath), where(businessKeyField, "==", documentId));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                // זורקים את אותה שגיאה ש-Firebase היה זורק כדי לשמור על עקביות
+                throw new Error(`No document to update in '${collectionPath}' with ${businessKeyField} = ${documentId}`);
+            }
+            if (querySnapshot.docs.length > 1) {
+                console.warn(`[Firestore] Warning: Multiple documents found with ${businessKeyField} = ${documentId}. Updating the first one found.`);
+            }
+            
+            // מצאנו את המסמך! docRef הוא עכשיו ההפניה הנכונה למסמך עם ה-ID הפנימי של Firestore
+            docRef = querySnapshot.docs[0].ref;
+            console.log(`[Firestore] Document found with internal ID: ${docRef.id}. Proceeding with update.`);
+
+        } else {
+            // אם זה אוסף שאינו במפה (כמו studentEvents), נניח שה-documentId הוא ה-ID הפנימי הנכון
+            console.log(`[Firestore] Collection '${collectionPath}' does not use a mapped business key. Assuming '${documentId}' is the internal Firestore ID.`);
+            docRef = doc(db, collectionPath, documentId);
+        }
+
+        // מבצעים את העדכון באמצעות ההפניה הנכונה
+        await updateDoc(docRef, data);
         console.log(`[Firestore] Document updated successfully: ${collectionPath}/${documentId}`);
+
     } catch (error) {
-        console.error(`[Firestore] Error updating document ${collectionPath}/${documentId}:`, error);
+        // שגיאת "No document to update" תיתפס כאן ותועבר הלאה
+        console.error(`[Firestore] CRITICAL ERROR updating document ${collectionPath}/${documentId}:`, error);
         throw error;
     }
 };
