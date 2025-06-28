@@ -1,19 +1,11 @@
 // src/utils/formMappings.js
 
-// This file is a central configuration object that acts as a "single source of truth"
-// for the metadata of every data entity in the application (e.g., student, course, semester).
-// This mapping is crucial for enabling the generic management components (modals, handlers)
-// to work with different types of data without needing large switch statements or duplicated logic.
-
 export const formMappings = {
-  // Each key in this object represents a `recordType`.
   student: {
-    collectionName: 'students',      // The name of the Firestore collection where this entity is stored.
-    primaryKey: 'id',                // The name of the field that serves as the unique identifier.
-    label: 'Student',                // A user-friendly label for this entity type.
-    recordType: 'student',           // The unique type identifier for this entity.
-    // A function that returns a default "empty" object for creating a new record of this type.
-    // It can accept `defaults` to pre-populate fields (e.g., from a calendar click).
+    collectionName: 'students',
+    primaryKey: 'id',
+    label: 'Student',
+    recordType: 'student',
     initialData: (defaults = {}) => ({
       id: '',
       studentIdCard: '',
@@ -38,7 +30,7 @@ export const formMappings = {
       eventCode: '',
       eventName: '',
       notes: '',
-      startDate: new Date().toISOString().slice(0, 10), // Defaults to today's date.
+      startDate: new Date().toISOString().slice(0, 10),
       endDate: new Date().toISOString().slice(0, 10),
       allDay: false,
       startHour: '09:00',
@@ -52,24 +44,22 @@ export const formMappings = {
     label: 'Year',
     recordType: 'year',
     initialData: (defaults = {}) => ({
-      yearCode: `YEAR-${Date.now()}`, // Provides a default, temporary unique ID.
+      yearCode: `YEAR-${Date.now()}`,
       yearNumber: new Date().getFullYear().toString(),
       startDate: '',
       endDate: '',
-      semesters: [], // An array to hold nested semester objects.
+      semesters: [],
       ...defaults,
     }),
   },
-  // Note that `semester` and `room` are "nested" entities. They are stored inside
-  // their parent documents ('years' and 'sites') but are managed as distinct record types.
   semester: {
-    collectionName: 'years', // The collection of the PARENT document.
+    collectionName: 'years',
     primaryKey: 'semesterCode',
     label: 'Semester',
     recordType: 'semester',
     initialData: (defaults = {}) => ({
       semesterCode: `SEM-${Date.now()}`,
-      yearCode: '', // The ID of the parent year.
+      yearCode: '',
       semesterNumber: '',
       startDate: '',
       endDate: '',
@@ -87,7 +77,7 @@ export const formMappings = {
       semesterCode: '',
       lecturerId: '',
       roomCode: '',
-      hours: [{ day: '', start: '09:00', end: '12:00' }], // Starts with one default time slot.
+      hours: [{ day: '', start: '09:00', end: '12:00' }],
       notes: '',
       zoomMeetinglink: '',
       ...defaults,
@@ -109,7 +99,7 @@ export const formMappings = {
       semesterCode: '',
       notes: '',
       zoomMeetinglink: '',
-      type: 'courseMeeting', // Explicitly sets the event type.
+      type: 'courseMeeting',
       allDay: false,
       ...defaults,
     }),
@@ -136,18 +126,18 @@ export const formMappings = {
       siteCode: `SITE-${Date.now()}`,
       siteName: '',
       notes: '',
-      rooms: [], // An array to hold nested room objects.
+      rooms: [],
       ...defaults,
     }),
   },
   room: {
-    collectionName: 'sites', // The collection of the PARENT document.
+    collectionName: 'sites',
     primaryKey: 'roomCode',
     label: 'Room',
     recordType: 'room',
     initialData: (defaults = {}) => ({
       roomCode: `ROOM-${Date.now()}`,
-      siteCode: '', // The ID of the parent site.
+      siteCode: '',
       roomName: '',
       notes: '',
       ...defaults,
@@ -165,7 +155,7 @@ export const formMappings = {
       endDate: new Date().toISOString().slice(0, 10),
       notes: '',
       type: 'holiday',
-      allDay: true, // Holidays typically default to being all-day events.
+      allDay: true, // Holidays default to all-day
       ...defaults,
     }),
   },
@@ -181,7 +171,7 @@ export const formMappings = {
       endDate: new Date().toISOString().slice(0, 10),
       notes: '',
       type: 'vacation',
-      allDay: true, // Vacations are also typically all-day events.
+      allDay: true, // Vacations default to all-day
       ...defaults,
     }),
   },
@@ -213,7 +203,7 @@ export const formMappings = {
       assignmentName: '',
       courseCode: '',
       submissionDate: new Date().toISOString().slice(0, 10),
-      submissionHour: '23:59', // A common default for assignment deadlines.
+      submissionHour: '23:59',
       notes: '',
       type: 'task',
       ...defaults,
@@ -221,22 +211,13 @@ export const formMappings = {
   },
 };
 
-/**
- * A helper function that uses the mapping to dynamically generate a blank
- * data object for any given record type.
- * @param {string} recordType - The type of record (e.g., 'course', 'student').
- * @param {object} [defaultValues={}] - An object with any values to override the defaults.
- * @returns {object} A blank data object ready to be used in a form.
- */
 export const generateInitialFormData = (recordType, defaultValues = {}) => {
-  // Check if a mapping exists for the requested type.
   if (formMappings[recordType] && typeof formMappings[recordType].initialData === 'function') {
     const initialData = formMappings[recordType].initialData(defaultValues);
     console.log(`[generateInitialFormData] Type: ${recordType}, Data:`, initialData);
     return initialData;
   }
 
-  // If no mapping is found, log a warning and return a generic object.
   console.warn(`[generateInitialFormData] No mapping or initialData function found for recordType: ${recordType}`);
   return { id: `TEMP-${Date.now()}`, ...defaultValues };
 };

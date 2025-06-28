@@ -1,19 +1,13 @@
-// src/pages/DashboardPage.jsx
-
 import React, { useState, useEffect, useMemo } from 'react';
-// Imports a wide range of Material-UI components for building a complex, data-rich layout.
-import { Box, Typography, Grid, Paper, List, ListItem, ListItemText, Divider, CircularProgress, Alert, Card, Stack, FormControl, Select, MenuItem, InputLabel, TextField, LinearProgress, Skeleton } from '@mui/material';
+import { Box, Typography, Grid, Paper, List, ListItem, ListItemText, Divider, CircularProgress, Alert, Card, Stack, FormControl, Select, MenuItem, InputLabel, TextField, LinearProgress, Skeleton } from '@mui/material'; // ✨ 1. הוספת ייבוא
 import { Link as RouterLink } from 'react-router-dom';
-// Imports contexts and services for data fetching.
 import { useAuth } from '../context/AuthContext';
 import { getAllVisibleEvents } from '../utils/getAllVisibleEvents';
 import { fetchCollection } from '../firebase/firestoreService';
-// Imports date utility functions for complex date manipulations.
 import { format, parseISO, compareAsc, startOfDay, endOfDay, addDays, isWithinInterval, isValid } from 'date-fns';
-// Imports the charting library for data visualization.
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 
-// Imports all the necessary icons for the dashboard cards.
+// Icons
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import SupervisedUserCircleIcon from '@mui/icons-material/SupervisedUserCircle';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -26,8 +20,7 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import QueryStatsIcon from '@mui/icons-material/QueryStats';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 
-// --- Constants & Helpers ---
-// A map to define consistent styling for different data types shown in summaries and charts.
+// --- Constants & Helpers --- (נשארים ללא שינוי)
 const EVENT_STYLES = {
   courseMeeting:    { color: '#3788d8', label: 'Course Meeting',     icon: <SchoolIcon fontSize="small"/> },
   studentEvent:     { color: '#ffc107', label: 'Personal',           icon: <EventIcon fontSize="small"/> },
@@ -41,19 +34,14 @@ const EVENT_STYLES = {
   default:          { color: '#6c757d', label: 'Other',              icon: <HelpOutlineIcon fontSize="small"/> }
 };
 const getEventStyle = (type) => EVENT_STYLES[type] || EVENT_STYLES.default;
-// A robust helper function to safely convert various date inputs into a valid Date object.
 const toValidDate = (dateInput) => { if (!dateInput) return null; if (dateInput instanceof Date) return dateInput; if (typeof dateInput.toDate === 'function') return dateInput.toDate(); try { const date = parseISO(String(dateInput)); return isValid(date) ? date : null; } catch { return null; }};
-// A helper to check if two date ranges overlap.
 function rangesOverlap(aStart, aEnd, bStart, bEnd) { return aStart <= bEnd && aEnd >= bStart; }
 
-// --- Reusable Sub-components ---
-// A reusable card component for the "Quick Actions" section.
+// --- Reusable Components --- (נשארים ללא שינוי)
 const DashboardCard = ({ title, to, icon: IconComponent, description }) => ( <Grid item xs={12} sm={6} md={3}><Paper component={RouterLink} to={to} sx={{ textDecoration: 'none', display: 'block', p: 2, height: '100%', '&:hover': { boxShadow: 4, transform: 'translateY(-2px)' }, transition: 'all 0.2s ease-in-out' }}><Stack direction="row" spacing={2} alignItems="center"><IconComponent color="primary" sx={{ fontSize: 40 }} /><Box><Typography variant="h6" sx={{ fontWeight: 'bold' }}>{title}</Typography><Typography variant="body2" color="text.secondary">{description}</Typography></Box></Stack></Paper></Grid> );
-// A reusable card for displaying a single, large statistic.
 const StatCard = ({ title, value, icon: IconComponent }) => ( <Grid item xs={12} sm={6} md={3}><Card elevation={2} sx={{ display: 'flex', alignItems: 'center', p: 2, height: '100%' }}><IconComponent color="action" sx={{ fontSize: 48, mr: 2 }} /><Box><Typography variant="h5" sx={{ fontWeight: 'bold' }}>{value ?? '...'}</Typography><Typography variant="body2" color="text.secondary">{title}</Typography></Box></Card></Grid> );
 
-// A helper component to show a detailed "skeleton" of the entire dashboard while data is loading.
-// This provides an excellent user experience by showing a placeholder of the final layout.
+// ✨ 2. קומפוננטת עזר להצגת שלד של כל הדשבורד
 const DashboardSkeleton = () => (
     <Box sx={{ flexGrow: 1, p: { xs: 2, sm: 3 }, maxWidth: '1300px', mx: 'auto' }}>
         <Typography variant="h4" gutterBottom><Skeleton width="40%" /></Typography>
@@ -76,22 +64,19 @@ const DashboardSkeleton = () => (
 // --- Main Component ---
 export default function DashboardPage() {
   const { currentUser, isLoadingAuth } = useAuth();
-  // === STATE MANAGEMENT ===
+  // ✨ 3. איחוד מצבי הטעינה
   const [isLoading, setIsLoading] = useState(isLoadingAuth);
   const [error, setError] = useState(null);
   const [rawData, setRawData] = useState({ events: [], tasks: [], courses: [], students: [], years: [] });
   
-  // State for the "Upcoming" section filters.
   const [upcomingTimeFilter, setUpcomingTimeFilter] = useState('week');
   const [upcomingCustomStart, setUpcomingCustomStart] = useState('');
   const [upcomingCustomEnd, setUpcomingCustomEnd] = useState('');
 
-  // State for the "Data Summary" section filters.
   const [summaryFilters, setSummaryFilters] = useState({ startDate: '', endDate: '', yearCode: '', semesterCode: '' });
 
   // --- Data Fetching ---
   useEffect(() => {
-    // Don't start fetching until we know the user's auth status.
     if (isLoadingAuth) {
         setIsLoading(true);
         return;
@@ -102,112 +87,95 @@ export default function DashboardPage() {
 
     const loadDashboardData = async () => {
       try {
-        // Fetch all the raw data needed for the dashboard in parallel for efficiency.
         const [events, tasks, students, courses, years] = await Promise.all([ getAllVisibleEvents(currentUser), fetchCollection('tasks'), fetchCollection('students'), fetchCollection('courses'), fetchCollection('years') ]);
         setRawData({ events: events || [], tasks: tasks || [], courses: courses || [], students: students || [], years: years || [] });
       } catch (err) { setError('Failed to load dashboard data.'); } 
       finally { setIsLoading(false); }
     };
     loadDashboardData();
-  }, [currentUser, isLoadingAuth]); // Re-fetch all data if the user logs in/out.
+  }, [currentUser, isLoadingAuth]);
 
-  // --- DERIVED DATA & MEMOIZATION ---
-  // A memoized calculation for the summary filter's semester dropdown.
+  // לוגיקת החישובים והפילטרים נשארת זהה לחלוטין
   const availableSemestersForSummary = useMemo(() => { if (!summaryFilters.yearCode) return []; const selectedYear = rawData.years.find(y => y.yearCode === summaryFilters.yearCode); return selectedYear?.semesters || []; }, [summaryFilters.yearCode, rawData.years]);
-
-  // This is the core data processing logic of the entire page. It is wrapped in `useMemo`
-  // so that these expensive calculations only re-run when the raw data or a filter changes.
-  // It takes the raw fetched data and transforms it into all the specific pieces needed for the UI.
-  const { upcomingEvents, upcomingTasks, pieChartData, summaryData, stats } = useMemo(() => {
-    // Destructure all raw data and filters for easier access.
-    const { events, tasks, courses, students, years } = rawData;
-    const { startDate: fStart, endDate: fEnd, yearCode, semesterCode } = summaryFilters;
-    
-    // Calculate "Upcoming" section data.
-    const UPCOMING_EVENT_TYPES = new Set([ 'courseMeeting', 'semesterMarker', 'yearMarker', 'event', 'holiday', 'vacation', 'studentEvent' ]);
-    const now = new Date();
-    let upStart = startOfDay(now), upEnd;
-    switch (upcomingTimeFilter) { case 'today': upEnd = endOfDay(now); break; case 'month': upEnd = endOfDay(addDays(now, 30)); break; case 'custom': upStart = upcomingCustomStart ? startOfDay(toValidDate(upcomingCustomStart)) : new Date(0); upEnd = upcomingCustomEnd ? endOfDay(toValidDate(upcomingCustomEnd)) : new Date(8640000000000000); break; default: upEnd = endOfDay(addDays(now, 7)); }
-    const upInterval = { start: isValid(upStart) ? upStart : startOfDay(now), end: isValid(upEnd) ? upEnd : endOfDay(addDays(now, 7)) };
-    const upcomingEvents = (events || []).filter(ev => { const type = ev.extendedProps?.type; const d = toValidDate(ev.start); return d && UPCOMING_EVENT_TYPES.has(type) && isWithinInterval(d, upInterval); }).sort((a, b) => compareAsc(toValidDate(a.start), toValidDate(b.start)));
-    const relevantTasks = (tasks || []).filter(t => !t.studentId || t.studentId === currentUser?.uid);
-    const upcomingTasks = relevantTasks.filter(t => { const d = toValidDate(t.submissionDate); return d && isWithinInterval(d, upInterval); }).sort((a, b) => compareAsc(toValidDate(a.submissionDate), toValidDate(b.submissionDate)));
-    
-    // Calculate data for the pie chart.
-    const pieCounts = upcomingEvents.reduce((acc, e) => { const type = e.extendedProps?.type || 'default'; acc[type] = (acc[type] || 0) + 1; return acc; }, {});
-    const pieChartData = Object.entries(pieCounts).map(([type, count]) => ({ name: getEventStyle(type).label, value: count, fill: getEventStyle(type).color }));
-
-    // Calculate "Data Summary" section data based on its own set of filters.
-    let definitionCount = 0;
-    if (yearCode) { const year = years.find(y => y.yearCode === yearCode); if (year) { if (semesterCode) { definitionCount = courses.filter(c => c.semesterCode === semesterCode).length; } else { const yearSemesterCodes = new Set((year.semesters || []).map(s => s.semesterCode)); definitionCount = courses.filter(c => yearSemesterCodes.has(c.semesterCode)).length; } } } else if (fStart || fEnd) { const s = fStart ? startOfDay(toValidDate(fStart)) : new Date(0); const e = fEnd ? endOfDay(toValidDate(fEnd)) : new Date(8640000000000000); const allSemesters = years.flatMap(y => y.semesters || []); const overlappingSemesters = allSemesters.filter(sem => { const semStart = toValidDate(sem.startDate); const semEnd = toValidDate(sem.endDate); return semStart && semEnd && rangesOverlap(semStart, semEnd, s, e); }); const overlappingSemesterCodes = new Set(overlappingSemesters.map(sem => sem.semesterCode)); definitionCount = courses.filter(c => overlappingSemesterCodes.has(c.semesterCode)).length; } else { definitionCount = courses.length; }
-    let timeFilteredEvents = events;
-    if (yearCode) { const year = years.find(y => y.yearCode === yearCode); let interval = null; if (year) { if (semesterCode) { const semester = (year.semesters || []).find(s => s.semesterCode === semesterCode); if (semester) { interval = { start: toValidDate(semester.startDate), end: toValidDate(semester.endDate) }; } } else { interval = { start: toValidDate(year.startDate), end: toValidDate(year.endDate) }; } } if (interval && isValid(interval.start) && isValid(interval.end)) { timeFilteredEvents = events.filter(ev => { const d = toValidDate(ev.start); return d && isWithinInterval(d, interval); }); } else { timeFilteredEvents = year ? [] : events; } } else if (fStart || fEnd) { const s = fStart ? startOfDay(toValidDate(fStart)) : new Date(0); const e = fEnd ? endOfDay(toValidDate(fEnd)) : new Date(8640000000000000); timeFilteredEvents = events.filter(ev => { const d = toValidDate(ev.start); return d && isWithinInterval(d, { start: s, end: e }); }); }
-    const summaryEventCounts = timeFilteredEvents.reduce((acc, ev) => { const type = ev.extendedProps?.type || 'default'; if(type !== 'courseDefinition') { acc[type] = (acc[type] || 0) + 1; } return acc; }, {});
-    summaryEventCounts.courseDefinition = definitionCount;
-
-    // Calculate simple overview stats.
-    const stats = { studentCount: (students || []).length, totalCourseCount: (courses || []).length };
-    
-    // Return all the calculated data in a single object.
-    return { upcomingEvents, upcomingTasks, pieChartData, summaryData: summaryEventCounts, stats };
-  }, [rawData, summaryFilters, upcomingTimeFilter, currentUser, upcomingCustomStart, upcomingCustomEnd]);
-  
-  // --- FILTER HANDLERS ---
+  const { upcomingEvents, upcomingTasks, pieChartData, summaryData, stats } = useMemo(() => { const { events, tasks, courses, students, years } = rawData; const { startDate: fStart, endDate: fEnd, yearCode, semesterCode } = summaryFilters; const UPCOMING_EVENT_TYPES = new Set([ 'courseMeeting', 'semesterMarker', 'yearMarker', 'event', 'holiday', 'vacation', 'studentEvent' ]); const now = new Date(); let upStart = startOfDay(now), upEnd; switch (upcomingTimeFilter) { case 'today': upEnd = endOfDay(now); break; case 'month': upEnd = endOfDay(addDays(now, 30)); break; case 'custom': upStart = upcomingCustomStart ? startOfDay(toValidDate(upcomingCustomStart)) : new Date(0); upEnd = upcomingCustomEnd ? endOfDay(toValidDate(upcomingCustomEnd)) : new Date(8640000000000000); break; default: upEnd = endOfDay(addDays(now, 7)); } const upInterval = { start: isValid(upStart) ? upStart : startOfDay(now), end: isValid(upEnd) ? upEnd : endOfDay(addDays(now, 7)) }; const upcomingEvents = (events || []).filter(ev => { const type = ev.extendedProps?.type; const d = toValidDate(ev.start); return d && UPCOMING_EVENT_TYPES.has(type) && isWithinInterval(d, upInterval); }).sort((a, b) => compareAsc(toValidDate(a.start), toValidDate(b.start))); const relevantTasks = (tasks || []).filter(t => !t.studentId || t.studentId === currentUser?.uid); const upcomingTasks = relevantTasks.filter(t => { const d = toValidDate(t.submissionDate); return d && isWithinInterval(d, upInterval); }).sort((a, b) => compareAsc(toValidDate(a.submissionDate), toValidDate(b.submissionDate))); const pieCounts = upcomingEvents.reduce((acc, e) => { const type = e.extendedProps?.type || 'default'; acc[type] = (acc[type] || 0) + 1; return acc; }, {}); const pieChartData = Object.entries(pieCounts).map(([type, count]) => ({ name: getEventStyle(type).label, value: count, fill: getEventStyle(type).color })); let definitionCount = 0; if (yearCode) { const year = years.find(y => y.yearCode === yearCode); if (year) { if (semesterCode) { definitionCount = courses.filter(c => c.semesterCode === semesterCode).length; } else { const yearSemesterCodes = new Set((year.semesters || []).map(s => s.semesterCode)); definitionCount = courses.filter(c => yearSemesterCodes.has(c.semesterCode)).length; } } } else if (fStart || fEnd) { const s = fStart ? startOfDay(toValidDate(fStart)) : new Date(0); const e = fEnd ? endOfDay(toValidDate(fEnd)) : new Date(8640000000000000); const allSemesters = years.flatMap(y => y.semesters || []); const overlappingSemesters = allSemesters.filter(sem => { const semStart = toValidDate(sem.startDate); const semEnd = toValidDate(sem.endDate); return semStart && semEnd && rangesOverlap(semStart, semEnd, s, e); }); const overlappingSemesterCodes = new Set(overlappingSemesters.map(sem => sem.semesterCode)); definitionCount = courses.filter(c => overlappingSemesterCodes.has(c.semesterCode)).length; } else { definitionCount = courses.length; } let timeFilteredEvents = events; if (yearCode) { const year = years.find(y => y.yearCode === yearCode); let interval = null; if (year) { if (semesterCode) { const semester = (year.semesters || []).find(s => s.semesterCode === semesterCode); if (semester) { interval = { start: toValidDate(semester.startDate), end: toValidDate(semester.endDate) }; } } else { interval = { start: toValidDate(year.startDate), end: toValidDate(year.endDate) }; } } if (interval && isValid(interval.start) && isValid(interval.end)) { timeFilteredEvents = events.filter(ev => { const d = toValidDate(ev.start); return d && isWithinInterval(d, interval); }); } else { timeFilteredEvents = year ? [] : events; } } else if (fStart || fEnd) { const s = fStart ? startOfDay(toValidDate(fStart)) : new Date(0); const e = fEnd ? endOfDay(toValidDate(fEnd)) : new Date(8640000000000000); timeFilteredEvents = events.filter(ev => { const d = toValidDate(ev.start); return d && isWithinInterval(d, { start: s, end: e }); }); } const summaryEventCounts = timeFilteredEvents.reduce((acc, ev) => { const type = ev.extendedProps?.type || 'default'; if(type !== 'courseDefinition') { acc[type] = (acc[type] || 0) + 1; } return acc; }, {}); summaryEventCounts.courseDefinition = definitionCount; const stats = { studentCount: (students || []).length, totalCourseCount: (courses || []).length }; return { upcomingEvents, upcomingTasks, pieChartData, summaryData: summaryEventCounts, stats }; }, [rawData, summaryFilters, upcomingTimeFilter, currentUser, upcomingCustomStart, upcomingCustomEnd]);
   const handleSummaryFilterChange = (e) => { const { name, value } = e.target; setSummaryFilters(prev => { const newState = { ...prev, [name]: value, }; if (name === 'yearCode') { newState.semesterCode = ''; } return newState; }); };
   const handleUpcomingFilterChange = (e) => { setUpcomingTimeFilter(e.target.value); if (e.target.value !== 'custom') { setUpcomingCustomStart(''); setUpcomingCustomEnd(''); } };
   
-  // --- RENDER LOGIC ---
-  // Show the full-page skeleton while the initial data is loading.
+  // ✨ 4. לוגיקת רינדור ראשית משופרת
   if (isLoading) {
     return <DashboardSkeleton />;
   }
   
-  // Prepare sorted years list for the filter dropdown.
   const sortedYears = [...(rawData.years || [])].sort((a, b) => (a.yearNumber || 0) - (b.yearNumber || 0));
 
-  // Main render output for the dashboard.
   return (
     <Box sx={{ flexGrow: 1, p: { xs: 2, sm: 3 }, maxWidth: '1300px', mx: 'auto' }}>
       <Typography variant="h4" gutterBottom>Dashboard</Typography>
       <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}> Your central hub for managing your schedule and system data. </Typography>
       
-      {/* System Overview Section */}
-      <Box sx={{ mb: 4 }}><Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>System Overview</Typography><Grid container spacing={2}><StatCard title="Registered Students" value={stats.studentCount} icon={PeopleIcon} /><StatCard title="Total Course Definitions" value={stats.totalCourseCount} icon={SchoolIcon} /></Grid></Box>
+      {/* ה-LinearProgress יופיע כחלק מה-Skeleton, ולכן אין צורך להוסיפו כאן שוב */}
       
-      {/* Quick Actions Section */}
+      <Box sx={{ mb: 4 }}><Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>System Overview</Typography><Grid container spacing={2}><StatCard title="Registered Students" value={stats.studentCount} icon={PeopleIcon} /><StatCard title="Total Course Definitions" value={stats.totalCourseCount} icon={SchoolIcon} /></Grid></Box>
       <Box sx={{ mb: 4 }}><Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>Quick Actions</Typography><Grid container spacing={3}><DashboardCard title="My Timetable" to="/timetable/calendar" icon={CalendarMonthIcon} description="View your full schedule." /><DashboardCard title="Manage Timetable" to="/manage-timetable" icon={SettingsIcon} description="Administer timetable entries." /><DashboardCard title="Manage Students" to="/manage-students" icon={SupervisedUserCircleIcon} description="Manage student accounts." /><DashboardCard title="Help & Support" to="/help" icon={HelpOutlineIcon} description="Find answers and guides." /></Grid></Box>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       
-      {/* "Upcoming" Section */}
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={2} sx={{ mb: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Upcoming</Typography>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
           <FormControl size="small" sx={{ minWidth: 160 }}>
             <InputLabel>Time Window</InputLabel>
             <Select value={upcomingTimeFilter} label="Time Window" onChange={handleUpcomingFilterChange}>
-              <MenuItem value="today">Today</MenuItem><MenuItem value="week">Next 7 Days</MenuItem><MenuItem value="month">Next 30 Days</MenuItem><MenuItem value="custom">Custom Range</MenuItem>
+              <MenuItem value="today">Today</MenuItem>
+              <MenuItem value="week">Next 7 Days</MenuItem>
+              <MenuItem value="month">Next 30 Days</MenuItem>
+              <MenuItem value="custom">Custom Range</MenuItem>
             </Select>
           </FormControl>
           {upcomingTimeFilter === 'custom' && (
-            <><TextField name="upcomingCustomStart" label="From" type="date" size="small" sx={{ width: { xs: 'calc(50% - 4px)', sm: 150 } }} InputLabelProps={{ shrink: true }} value={upcomingCustomStart} onChange={(e) => setUpcomingCustomStart(e.target.value)} /><TextField name="upcomingCustomEnd" label="To" type="date" size="small" sx={{ width: { xs: 'calc(50% - 4px)', sm: 150 } }} InputLabelProps={{ shrink: true }} value={upcomingCustomEnd} onChange={(e) => setUpcomingCustomEnd(e.target.value)} /></>
+            <>
+              <TextField name="upcomingCustomStart" label="From" type="date" size="small" sx={{ width: { xs: 'calc(50% - 4px)', sm: 150 } }} InputLabelProps={{ shrink: true }} value={upcomingCustomStart} onChange={(e) => setUpcomingCustomStart(e.target.value)} />
+              <TextField name="upcomingCustomEnd" label="To" type="date" size="small" sx={{ width: { xs: 'calc(50% - 4px)', sm: 150 } }} InputLabelProps={{ shrink: true }} value={upcomingCustomEnd} onChange={(e) => setUpcomingCustomEnd(e.target.value)} />
+            </>
           )}
         </Stack>
       </Stack>
       
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={4}><Paper elevation={2} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}><Stack direction="row" spacing={1} alignItems="center" mb={1.5}><EventIcon color="action" /><Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Events</Typography></Stack><Box sx={{ flexGrow: 1, overflow: 'auto', maxHeight: 250 }}>{upcomingEvents.length > 0 ? (<List dense disablePadding>{upcomingEvents.map(e => (<ListItem key={e.id} dense><ListItemText primary={e.title} secondary={`${format(toValidDate(e.start), 'EEE, d MMM, HH:mm')} - ${getEventStyle(e.extendedProps?.type).label}`} /></ListItem>))}</List>) : (<Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>No upcoming events.</Typography>)}</Box></Paper></Grid>
+        <Grid item xs={12} md={4}><Paper elevation={2} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}><Stack direction="row" spacing={1} alignItems="center" mb={1.5}><EventIcon color="action" /><Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Events</Typography></Stack><Box sx={{ flexGrow: 1, overflow: 'auto', maxHeight: 250 }}>{upcomingEvents.length > 0 ? (<List dense disablePadding>{upcomingEvents.map(e => (
+          <ListItem key={e.id} dense>
+            <ListItemText 
+              primary={e.title} 
+              secondary={`${format(toValidDate(e.start), 'EEE, d MMM, HH:mm')} - ${getEventStyle(e.extendedProps?.type).label}`}
+            />
+          </ListItem>
+        ))}</List>) : (<Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>No upcoming events.</Typography>)}</Box></Paper></Grid>
         <Grid item xs={12} md={4}><Paper elevation={2} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}><Stack direction="row" spacing={1} alignItems="center" mb={1.5}><TaskAltIcon color="action" /><Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Tasks</Typography></Stack><Box sx={{ flexGrow: 1, overflow: 'auto', maxHeight: 250 }}>{upcomingTasks.length > 0 ? (<List dense disablePadding>{upcomingTasks.map(t => (<ListItem key={t.taskCode || t.id} dense><ListItemText primary={t.title || t.assignmentName} secondary={`Due: ${format(toValidDate(t.submissionDate), 'EEE, d MMM')}`} /></ListItem>))}</List>) : (<Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>No upcoming tasks.</Typography>)}</Box></Paper></Grid>
         <Grid item xs={12} md={4}><Paper elevation={2} sx={{ p: 2, height: '100%' }}><Stack direction="row" spacing={1} alignItems="center" mb={1.5}><AssessmentIcon color="action" /><Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Upcoming Breakdown</Typography></Stack>{pieChartData.length > 0 ? (<Box sx={{ height: 250 }}><ResponsiveContainer width="100%" height="100%"><PieChart margin={{ top: 5, right: 5, bottom: 5, left: 5 }}><Pie data={pieChartData} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={50} outerRadius={75} label={false}>{pieChartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.fill} />))}</Pie><RechartsTooltip /><Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} /></PieChart></ResponsiveContainer></Box>) : (<Typography variant="body2" color="text.secondary" sx={{ mt: 2, textAlign: 'center' }}>No upcoming events to display.</Typography>)}</Paper></Grid>
       </Grid>
       
-      {/* "Data Summary & Analysis" Section */}
       <Paper elevation={2} sx={{ p: 2, mt: 4 }}>
         <Stack direction="row" spacing={1} alignItems="center" mb={2}><QueryStatsIcon color="action" /><Typography variant="h6" sx={{ fontWeight: 'bold' }}>Data Summary & Analysis</Typography></Stack>
         <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid item xs={12} sm={3}><TextField name="startDate" label="From" type="date" size="small" fullWidth InputLabelProps={{ shrink: true }} value={summaryFilters.startDate} onChange={handleSummaryFilterChange} disabled={!!summaryFilters.yearCode} /></Grid>
             <Grid item xs={12} sm={3}><TextField name="endDate" label="To" type="date" size="small" fullWidth InputLabelProps={{ shrink: true }} value={summaryFilters.endDate} onChange={handleSummaryFilterChange} disabled={!!summaryFilters.yearCode} /></Grid>
-            <Grid item xs={12} sm={3}><FormControl size="small" fullWidth><InputLabel>Year</InputLabel><Select name="yearCode" value={summaryFilters.yearCode} label="Year" onChange={handleSummaryFilterChange}><MenuItem value=""><em>All Years</em></MenuItem>{sortedYears.map(y => (<MenuItem key={y.yearCode} value={y.yearCode}>{y.yearNumber}</MenuItem>))}</Select></FormControl></Grid>
-            <Grid item xs={12} sm={3}><FormControl size="small" fullWidth disabled={!summaryFilters.yearCode}><InputLabel>Semester</InputLabel><Select name="semesterCode" value={summaryFilters.semesterCode} label="Semester" onChange={handleSummaryFilterChange}><MenuItem value=""><em>Any Semester</em></MenuItem>{availableSemestersForSummary.map(s => (<MenuItem key={s.semesterCode} value={s.semesterCode}>{s.semesterNumber}</MenuItem>))}</Select></FormControl></Grid>
+            <Grid item xs={12} sm={3}>
+                <FormControl size="small" fullWidth>
+                    <InputLabel>Year</InputLabel>
+                    <Select name="yearCode" value={summaryFilters.yearCode} label="Year" onChange={handleSummaryFilterChange}>
+                        <MenuItem value=""><em>All Years</em></MenuItem>
+                        {sortedYears.map(y => (<MenuItem key={y.yearCode} value={y.yearCode}>{y.yearNumber}</MenuItem>))}
+                    </Select>
+                </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={3}>
+                <FormControl size="small" fullWidth disabled={!summaryFilters.yearCode}>
+                    <InputLabel>Semester</InputLabel>
+                    <Select name="semesterCode" value={summaryFilters.semesterCode} label="Semester" onChange={handleSummaryFilterChange}>
+                        <MenuItem value=""><em>Any Semester</em></MenuItem>
+                        {availableSemestersForSummary.map(s => (<MenuItem key={s.semesterCode} value={s.semesterCode}>{s.semesterNumber}</MenuItem>))}
+                    </Select>
+                </FormControl>
+            </Grid>
         </Grid>
         <Divider sx={{ my: 2 }} />
         <Grid container spacing={2}>

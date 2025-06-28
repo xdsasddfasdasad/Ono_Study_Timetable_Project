@@ -1,35 +1,25 @@
 // src/config/aiTools.js
 
-// This file defines the schema for the tools (functions) that are made available to the AI model (Gemini).
-// This structure tells the AI what functions it can call, what they do, and what parameters they expect.
-// The AI uses this information to decide when to call a function to get information from our system
-// instead of just trying to answer from its general knowledge.
-
 export const tools = [
   {
-    // Each object in this array can contain a set of function declarations.
     functionDeclarations: [
       {
-        // `name`: The exact name of the function to be called in our application's code.
         name: "getCalendarEvents",
-        // `description`: A clear, natural language explanation of what the function does.
-        // The AI uses this description to determine if the function is relevant to the user's query.
-        // (Hebrew: "Retrieve all event types from the student's calendar for a given date range.")
-        description: "Fetches all types of events from the student's calendar (classes, holidays, vacations, general events, tasks, and personal events) for a given date range.",
-        // `parameters`: An object defining the arguments the function accepts.
+        description: "אחזר את כל סוגי האירועים מלוח השנה של הסטודנט (שיעורים, חגים, חופשות, אירועים כלליים, משימות ואירועים אישיים) עבור טווח תאריכים נתון.",
         parameters: {
           type: "OBJECT",
           properties: {
             startDate: {
               type: "STRING",
-              // NOTE: The 'format: "DATE"' property was removed. While it's part of the OpenAPI spec,
-              // simply describing the required format (YYYY-MM-DD) in the description often yields
-              // more reliable results with large language models.
-              description: "The start date for the search, in YYYY-MM-DD format.",
+              // ✨ FIX: Remove the 'format' property
+              // format: "DATE", 
+              description: "תאריך ההתחלה לחיפוש, בפורמט YYYY-MM-DD.",
             },
             endDate: {
               type: "STRING",
-              description: "The end date for the search, in YYYY-MM-DD format.",
+              // ✨ FIX: Remove the 'format' property
+              // format: "DATE",
+              description: "תאריך הסיום לחיפוש, בפורמט YYYY-MM-DD.",
             },
           },
           required: ["startDate", "endDate"],
@@ -37,61 +27,58 @@ export const tools = [
       },
       {
         name: "getStudentCourses",
-        // (Hebrew: "Retrieve the list of courses a student is enrolled in for a specific semester.")
-        description: "Retrieves the list of courses the student is enrolled in for a specific semester. If no semester is specified, it returns the courses for the current semester.",
+        description: "אחזר את רשימת הקורסים שאליהם הסטודנט רשום לסמסטר ספציפי. אם לא מצוין סמסטר, הפונקציה תחזיר את הקורסים לסמסטר הנוכחי.",
         parameters: {
             type: "OBJECT",
             properties: {
                 semesterCode: {
                     type: "STRING",
-                    description: "The semester code (e.g., 'S24A'). This is an optional parameter.",
+                    description: "קוד הסמסטר (לדוגמה, 'S24A'). זהו פרמטר אופציונלי.",
                 },
             },
         },
       },
       {
         name: "getCourseDefinitions",
-        // (Hebrew: "Retrieve a list of all course definitions in the system. Can be filtered by semester or searched by name.")
-        description: "Retrieves a list of all available course definitions in the system. Can be filtered by semester or searched for a specific course by its name.",
+        // ✨ FIX: Updated description and parameters
+        description: "אחזר רשימה של כל הגדרות הקורס הקיימות במערכת. ניתן לסנן לפי סמסטר או לחפש קורס ספציפי לפי שמו.",
         parameters: {
             type: "OBJECT",
             properties: {
                 semesterCode: {
                     type: "STRING",
-                    description: "An optional semester code to filter by (e.g., 'S25A').",
+                    description: "קוד סמסטר אופציונלי לסינון (לדוגמה, 'S25A').",
                 },
                 courseName: {
                     type: "STRING",
-                    description: "A course name (or part of it) to search for (optional).",
+                    description: "שם קורס (או חלק ממנו) לחיפוש (אופציונלי).",
                 }
             },
         },
       },
       {
         name: "getLecturerInfo",
-        // (Hebrew: "Retrieve information about all lecturers in the system, or a specific lecturer by name.")
-        description: "Retrieves information about all lecturers in the system, or about a specific lecturer by name.",
+        description: "אחזר מידע על כל המרצים במערכת, או על מרצה ספציפי לפי שם.",
         parameters: {
             type: "OBJECT",
             properties: {
                 name: {
                     type: "STRING",
-                    description: "The name of the lecturer to search for (optional).",
+                    description: "שם המרצה לחיפוש (אופציונלי).",
                 },
             },
         },
       },
+      // ✨ NEW TOOL for Sites/Rooms ✨
       {
-        // This is a new tool added to handle site and room queries.
         name: "getSiteAndRoomInfo",
-        // (Hebrew: "Retrieve information about all sites (campuses) and their rooms, or search for a specific room.")
-        description: "Retrieves information about all sites (campuses) and the rooms within them, or searches for a specific room.",
+        description: "אחזר מידע על כל האתרים (קמפוסים) והחדרים שבהם, או חפש חדר ספציפי.",
         parameters: {
             type: "OBJECT",
             properties: {
                 roomCode: {
                     type: "STRING",
-                    description: "The specific room code to search for (optional).",
+                    description: "קוד החדר הספציפי לחיפוש (אופציונלי).",
                 },
             },
         },

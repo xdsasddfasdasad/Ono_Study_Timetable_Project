@@ -1,10 +1,3 @@
-// src/handlers/formHandlers.js
-
-// This file serves as a central hub for all complex data manipulation logic.
-// It acts as a "handler" layer that sits between the UI components (modals) and the
-// low-level database services (firestoreService). This pattern is excellent for
-// centralizing business logic, validation, and complex operations like cascading deletes.
-
 import {
     setDocument, updateDocument, deleteDocument,
     saveSemesterInYear, deleteSemesterFromYear,
@@ -12,35 +5,29 @@ import {
     fetchCollectionWithQuery, performBatchWrites, fetchCollection
 } from "../firebase/firestoreService";
 import { where } from "firebase/firestore";
-// Imports validation logic and data structure mappings.
 import { validateFormByType } from "../utils/validateForm";
 import { formMappings } from "../utils/formMappings";
-// Imports higher-level utility functions.
 import { regenerateMeetingsForCourse, deleteMeetingsForCourse } from "../utils/courseMeetingGenerator";
 import { signUpUser } from "../firebase/authService";
 
 /**
- * An internal helper function to determine the type of operation and relevant metadata
- * based on the entity being processed.
+ * פונקציית עזר פנימית לזיהוי סוג הפעולה והמידע הרלוונטי על בסיס הישות.
  */
 const getOperationDetails = (entityKey, formData, recordTypeHint) => {
-    // Determine the 'recordType' (e.g., 'semester') from the hint or by looking it up in the mappings.
     const recordType = recordTypeHint || Object.values(formMappings).find(m => m.collectionName === entityKey)?.recordType;
     if (!recordType) throw new Error(`Configuration Error: Could not determine recordType for entityKey '${entityKey}' with hint '${recordTypeHint}'.`);
 
     const mapping = formMappings[recordType];
     if (!mapping) throw new Error(`Configuration Error: No mapping found for recordType '${recordType}'.`);
 
-    // This object will hold all the necessary metadata for the operation.
     const details = {
-        isNested: false, // Is this data stored in an array inside another document?
+        isNested: false,
         recordType: recordType,
         collectionName: mapping.collectionName,
         primaryKeyField: mapping.primaryKey,
-        parentInfo: null, // Info about the parent document if it's nested.
+        parentInfo: null,
     };
     
-    // Specific logic for nested data types.
     if (recordType === 'semester') {
         details.isNested = true;
         details.parentInfo = { collectionName: 'years', docId: formData.yearCode, arrayName: 'semesters' };
@@ -53,8 +40,7 @@ const getOperationDetails = (entityKey, formData, recordTypeHint) => {
 };
 
 /**
- * A central, generic handler for saving a new record or updating an existing one.
- * This function orchestrates validation, data preparation, saving, and any post-save actions.
+ * Handler מרכזי וגנרי לשמירה או עדכון של כל רשומה במערכת.
  */
 export const handleSaveOrUpdateRecord = async (entityKey, formData, mode, options = {}) => {
     const { recordType: recordTypeHint, editingId } = options;
@@ -67,8 +53,7 @@ export const handleSaveOrUpdateRecord = async (entityKey, formData, mode, option
         console.log(`[Handler:Save] Details: type=${recordType}, pk=${primaryKeyField}, collection=${collectionName}`);
         let extraValidationOptions = { ...options };
 
-        // For some validations, we need to fetch extra context.
-        // e.g., To validate a course meeting's dates, we need the parent semester's start and end dates.
+        // ✨ FIX: If validating a course meeting, fetch the semester data first
         if (recordType === 'courseMeeting' && formData.semesterCode) {
             const years = await fetchCollection("years");
             const parentSemester = years.flatMap(y => y.semesters || []).find(s => s.semesterCode === formData.semesterCode);
@@ -77,65 +62,64 @@ export const handleSaveOrUpdateRecord = async (entityKey, formData, mode, option
             }
         }
 
-        // --- Step 1: Validation ---
+        // --- שלב 1: ולידציה ---
         const validationErrors = await validateFormByType(recordType, formData, extraValidationOptions);
         if (Object.keys(validationErrors).length > 0) {
-            // If validation fails, throw an error that includes the specific field errors.
             throw { validationErrors, message: "Validation failed. Please check the form fields." };
         }
         
-        // --- Step 2: Prepare Data for Saving ---
+        // --- שלב 2: הכנת הנתונים לשמירה ---
         let dataToSave = { ...formData };
         const recordId = dataToSave[primaryKeyField];
 
-        // This is a robust helper function to ensure any date value is a valid Date object
-        // before we try to save it to Firestore, preventing crashes from invalid date strings.
+        // ✨ --- התיקון הסופי והמרכזי נמצא כאן --- ✨
+        // פונקציית עזר פנימית להמרת תאריך חכמה
         const toValidDate = (dateValue) => {
             if (!dateValue) return null;
-            if (dateValue instanceof Date) return dateValue; // Already a Date object.
-            if (typeof dateValue.toDate === 'function') return dateValue.toDate(); // It's a Firestore Timestamp.
-            
-            // Otherwise, try to parse it (likely from a string).
+            // אם זה כבר אובייקט Date, החזר אותו
+            if (dateValue instanceof Date) return dateValue;
+            // אם זה Timestamp של Firestore, השתמש ב-toDate()
+            if (typeof dateValue.toDate === 'function') return dateValue.toDate();
+            // אחרת, נסה להמיר אותו (כנראה ממחרוזת)
             const date = new Date(dateValue);
-            // If the parsed date is invalid, throw an error to stop the save process.
+            // החזר את התאריך רק אם הוא תקין, אחרת זרוק שגיאה
             if (isNaN(date.getTime())) throw new RangeError(`Invalid date value provided: ${dateValue}`);
             return date;
         };
         
-        // Apply the safe date conversion to relevant fields.
-        if ('start' in dataToSave) dataToSave.start = toValidDate(dataToSave.start);
-        if ('end' in dataToSave) dataToSave.end = toValidDate(dataToSave.end);
+        // המר את שדות התאריך הרלוונטיים באמצעות הפונקציה החכמה.
+        // זה מבטיח שלעולם לא ננסה לשמור תאריך לא תקין.
+        if ('start' in dataToSave) {
+            dataToSave.start = toValidDate(dataToSave.start);
+        }
+        if ('end' in dataToSave) {
+            dataToSave.end = toValidDate(dataToSave.end);
+        }
+        // --- סוף התיקון ---
 
-        // --- Step 3: Special Logic by Entity Type ---
-        // Some entities, like 'student', require special handling (e.g., calling auth services).
+        // --- שלב 3: לוגיקה ייעודית לפי סוג ישות ---
         if (recordType === 'student' && mode === 'add') {
             const { email, password, ...profileData } = dataToSave;
-            // The `signUpUser` service handles both Auth and Firestore creation.
             const newUserData = await signUpUser(email, password, profileData);
             return { success: true, message: `Student ${newUserData.profile.username} created successfully.` };
         }
 
-        // --- Step 4: Save to Firestore ---
+        // --- שלב 4: שמירה ל-Firestore ---
         if (opDetails.isNested) {
-            // If the data is nested (like a semester in a year), call the specific handler for it.
             if (recordType === 'semester') await saveSemesterInYear(opDetails.parentInfo.docId, dataToSave);
             else if (recordType === 'room') await saveRoomInSite(opDetails.parentInfo.docId, dataToSave);
         } else {
-            // For top-level documents.
             if (!recordId) throw new Error(`Primary key '${primaryKeyField}' is missing from the data.`);
             
             if (mode === 'add') {
-                // `setDocument` creates a document with a specific, client-defined ID.
                 await setDocument(collectionName, recordId, dataToSave);
             } else { // 'edit'
-                // In edit mode, we don't want to update the primary key itself.
                 delete dataToSave[primaryKeyField];
                 await updateDocument(collectionName, recordId, dataToSave);
             }
         }
         
-        // --- Step 5: Post-Save Actions ---
-        // After a course is saved, we need to regenerate its meeting instances on the calendar.
+        // --- שלב 5: פעולות לאחר שמירה ---
         if (recordType === 'course') {
             console.log(`[Handler:Save] Post-save action: Regenerating meetings for course ${recordId}`);
             await regenerateMeetingsForCourse(recordId);
@@ -154,8 +138,7 @@ export const handleSaveOrUpdateRecord = async (entityKey, formData, mode, option
 };
 
 /**
- * A central, generic handler for deleting any record from the system.
- * This function is responsible for handling "cascading deletes" where necessary.
+ * Handler מרכזי וגנרי למחיקת כל רשומה מהמערכת.
  */
 export const handleDeleteEntity = async (entityKey, recordId, options = {}) => {
     const { parentDocId, recordType: recordTypeHint } = options;
@@ -164,72 +147,84 @@ export const handleDeleteEntity = async (entityKey, recordId, options = {}) => {
     try {
         const opDetails = getOperationDetails(entityKey, {}, recordTypeHint);
         const { recordType, collectionName } = opDetails;
-        const batchWrites = []; // We will gather all delete operations into a single atomic batch.
+        const batchWrites = []; // Array to hold all delete operations
 
-        // --- Cascading Delete Logic ---
-        
-        // If deleting a Year, we must also delete all its semesters, courses, meetings, and tasks.
+        // ✨ FIX 3.1: Logic for deleting a Year
         if (recordType === 'year') {
             console.log(`[Handler:Delete] Year deletion detected for ${recordId}. Cascading...`);
+            // Fetch all courses that belong to semesters within this year
             const yearToDelete = await fetchCollectionWithQuery('years', [where('yearCode', '==', recordId)]);
             const semesterCodesToDelete = (yearToDelete[0]?.semesters || []).map(s => s.semesterCode);
             
             if (semesterCodesToDelete.length > 0) {
                 const relatedCourses = await fetchCollectionWithQuery('courses', [where('semesterCode', 'in', semesterCodesToDelete)]);
                 for (const course of relatedCourses) {
-                    console.log(`[Handler:Delete] -> Queueing deletes for related course: ${course.courseCode}`);
-                    // A. Queue deletes for all meetings of each related course.
+                    console.log(`[Handler:Delete] -> Deleting meetings and tasks for related course: ${course.courseCode}`);
+                    // A. Delete all meetings for each related course
                     const courseMeetings = await fetchCollectionWithQuery('coursesMeetings', [where('courseCode', '==', course.courseCode)]);
                     courseMeetings.forEach(meeting => batchWrites.push({ type: 'delete', collectionPath: 'coursesMeetings', documentId: meeting.id }));
                     
-                    // B. Queue deletes for all tasks of each related course.
+                    // B. Delete all tasks for each related course
                     const courseTasks = await fetchCollectionWithQuery('tasks', [where('courseCode', '==', course.courseCode)]);
                     courseTasks.forEach(task => batchWrites.push({ type: 'delete', collectionPath: 'tasks', documentId: task.assignmentCode }));
+                    
+                    // C. Delete the course definition itself
+                    //batchWrites.push({ type: 'delete', collectionPath: 'courses', documentId: course.courseCode });
                 }
             }
         }
 
-        // If deleting a Semester, we must also delete all its courses, meetings, and tasks.
+        // ✨ FIX 3.2: Logic for deleting a Semester
         if (recordType === 'semester') {
             console.log(`[Handler:Delete] Semester deletion detected for ${recordId}. Cascading...`);
-            await deleteSemesterFromYear(parentDocId, recordId); // This removes it from the parent year's array.
+            // This is handled by the Year deletion logic, but if a semester is deleted directly:
+            await deleteSemesterFromYear(parentDocId, recordId); // This removes it from the parent year document
 
+            // Then, find and delete all related courses (and their meetings/tasks)
             const relatedCourses = await fetchCollectionWithQuery('courses', [where('semesterCode', '==', recordId)]);
             for (const course of relatedCourses) {
-                console.log(`[Handler:Delete] -> Queueing deletes for related course: ${course.courseCode}`);
+                console.log(`[Handler:Delete] -> Deleting meetings and tasks for related course: ${course.courseCode}`);
                 const courseMeetings = await fetchCollectionWithQuery('coursesMeetings', [where('courseCode', '==', course.courseCode)]);
                 courseMeetings.forEach(meeting => batchWrites.push({ type: 'delete', collectionPath: 'coursesMeetings', documentId: meeting.id }));
                 
                 const courseTasks = await fetchCollectionWithQuery('tasks', [where('courseCode', '==', course.courseCode)]);
                 courseTasks.forEach(task => batchWrites.push({ type: 'delete', collectionPath: 'tasks', documentId: task.assignmentCode }));
+                
+                // batchWrites.push({ type: 'delete', collectionPath: 'courses', documentId: course.courseCode });
             }
+            // No need to delete the main document, as semesters are nested.
         }
         
-        // If deleting a Course, we must also delete all its meetings and tasks.
+        // ✨ FIX 4: Logic for deleting a Course
         if (recordType === 'course') {
             console.log(`[Handler:Delete] Course deletion detected for ${recordId}. Cascading...`);
-            await deleteMeetingsForCourse(recordId, batchWrites); // Use the utility function to queue deletes.
+            // A. Delete all meetings for this course
+            const courseMeetings = await fetchCollectionWithQuery('coursesMeetings', [where('courseCode', '==', recordId)]);
+            courseMeetings.forEach(meeting => batchWrites.push({ type: 'delete', collectionPath: 'coursesMeetings', documentId: meeting.id }));
+            
+            // B. Delete all tasks for this course
+            const courseTasks = await fetchCollectionWithQuery('tasks', [where('courseCode', '==', recordId)]);
+            courseTasks.forEach(task => batchWrites.push({ type: 'delete', collectionPath: 'tasks', documentId: task.assignmentCode }));
         }
 
         // --- Main Deletion Logic ---
-        if (opDetails.isNested && recordType !== 'semester') { // Semesters are special as they don't have their own collection.
+        if (opDetails.isNested && recordType !== 'semester') { // Semester is special
             if (!parentDocId) throw new Error(`Parent ID required for nested delete of ${recordType}.`);
             if (recordType === 'room') await deleteRoomFromSite(parentDocId, recordId);
         } else if (recordType !== 'semester') {
              if (recordType === 'student') {
-                // IMPORTANT: This only deletes the Firestore profile. The Firebase Auth user is NOT deleted.
-                // This is a business decision to prevent accidental permanent user deletion.
                 console.warn(`Deleting student Firestore profile ${recordId}. Auth user NOT deleted.`);
             }
-            // Add the main document itself to the batch to be deleted.
+            // Add the main document to be deleted
             batchWrites.push({ type: 'delete', collectionPath: collectionName, documentId: recordId });
         }
 
-        // --- Execute the Batch ---
+        // --- Execute all deletes in a single batch ---
         if (batchWrites.length > 0) {
             console.log(`[Handler:Delete] Executing batch delete of ${batchWrites.length} documents.`);
             await performBatchWrites(batchWrites);
         } else {
+             // This can happen for a semester deletion if there are no related courses
             console.log("[Handler:Delete] No batch operations to perform, deletion considered complete.");
         }
         
